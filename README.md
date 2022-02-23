@@ -38,4 +38,6 @@ or more concrete:
 ![AFL++ output screen](/2022/02/afl.svg)
 ```
 
-After you pushed you changes to GitHub the site will be rendered automatically with a GitHub Action (more info here: https://gohugo.io/hosting-and-deployment/hosting-on-github/)
+After you pushed you changes to GitHub the site will be rendered automatically with a GitHub Action (more info here: https://gohugo.io/hosting-and-deployment/hosting-on-github/ and https://github.com/peaceiris/actions-hugo)
+
+Check out the existing pages under `content/` for additional settings (table of contents, tags, ...) or `themes/terminal/archetypes/posts.md`.
