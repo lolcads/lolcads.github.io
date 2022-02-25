@@ -1,4 +1,6 @@
-# How to create new posts
+# lolcads tech blog
+
+## How to create new posts
 
 Make sure you have installed `hugo` (https://gohugo.io/getting-started/installing/). `hugo` must be run from the root directory of this repository (e.g. `/home/user/path/to/lolcads.github.io/`). Make also sure that everything renders just fine:
 
@@ -38,6 +40,10 @@ or more concrete:
 ![AFL++ output screen](/2022/02/afl.svg)
 ```
 
+Check out the existing pages under `content/` for additional settings (table of contents, tags, ...) or `themes/terminal/archetypes/posts.md`.
+
+## Rendering
+
 After you pushed you changes to GitHub the site will be rendered automatically with a GitHub Action (more info here: https://gohugo.io/hosting-and-deployment/hosting-on-github/ and https://github.com/peaceiris/actions-hugo)
 
-Check out the existing pages under `content/` for additional settings (table of contents, tags, ...) or `themes/terminal/archetypes/posts.md`.
+The rendered files will be published to the `gh-pages` branch and made available here: https://lolcads.github.io/
