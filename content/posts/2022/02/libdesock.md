@@ -3,6 +3,8 @@ title: "libdesock"
 date: 2022-02-22T14:24:40+01:00
 draft: false
 author: Patrick Detering
+tags: [fuzzing, network, sockets, emulation]
+keywords: [fuzzing, network, sockets, emulation]
 ---
 
 # Fuzzing Network Applications with AFL and libdesock
