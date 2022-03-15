@@ -1,10 +1,8 @@
 ---
 title: "Contact"
-date: 2022-02-23T11:58:00+01:00
-draft: false
+readingTime: false
 toc: false
-author: lolcads
 ---
 
 You can reach us at: ![alt](/mail.png)
-Feel free to use our [PGP key](/lolcads.pub)!
+Feel free to use our [PGP key](/lolcads.pub) (fingerprint: `CCD8 D75E 9A10 6BF4 3668  AB99 7E64 EF83 D585 CECA`)
