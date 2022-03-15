@@ -6,5 +6,5 @@ toc: false
 author: lolcads
 ---
 
-TODO add contact information
-
+You can reach us at: ![alt](/mail.png)
+Feel free to use are [PGP key](/lolcads.pub)!
