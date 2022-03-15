@@ -7,4 +7,4 @@ author: lolcads
 ---
 
 You can reach us at: ![alt](/mail.png)
-Feel free to use are [PGP key](/lolcads.pub)!
+Feel free to use our [PGP key](/lolcads.pub)!
