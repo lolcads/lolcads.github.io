@@ -40,6 +40,30 @@ or more concrete:
 ![AFL++ output screen](/2022/02/afl.svg)
 ```
 
+The table of contents is automatically generated from the headings. For this to work, remember to use increasing heading levels for subsections, without skipping levels inbetween.
+Correct: 
+```markdown
+# The main heading
+This is my cool introduction
+## First section
+interesting stuff
+## Second section
+even more interesting stuff
+### Subsection to second section
+so much interesting stuff
+```
+Incorrect:
+```markdown
+# The main heading
+Everything good so far...
+### First section
+Oh no, now the table of contents is broken because I skipped a heading level!
+### Second section
+And i cant stop!
+#### Subsection
+Its getting worse!
+```
+
 Check out the existing pages under `content/` for additional settings (table of contents, tags, ...) or `themes/terminal/archetypes/posts.md`.
 
 ## Rendering
