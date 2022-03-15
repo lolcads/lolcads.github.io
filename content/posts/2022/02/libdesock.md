@@ -21,7 +21,7 @@ These desocketing tools enabled network fuzzing without
 making a lot of additional modifications to the program under test
 and quickly became widely used in combination with AFL.
 
-### What is "desocketing"?
+## What is "desocketing"?
 Before desocketing tools were published two common techniques for
 network fuzzing were
 1. Sending fuzz input over real network connections
@@ -55,7 +55,7 @@ traffic becomes visible on a terminal.
 
 ![](/2022/02/demo.svg)
 
-### How desocketing works
+## How desocketing works
 Making desocketing libraries has its complexities.
 AFLplusplus' [socketfuzz](https://github.com/AFLplusplus/AFLplusplus/tree/stable/utils/socket_fuzzing)
 ships a desocketing library that just returns `0` (stdin) in `accept()`.
@@ -93,7 +93,7 @@ A better desocketing library is needed that is more resource-efficient and handl
 modern network applications correctly.
 So we created a new desocketing library: "libdesock".
 
-### Using libdesock
+## Using libdesock
 libdesock fully emulates the network stack of the kernel. The kernel is only queried to obtain file
 descriptors and to do I/O on stdin and stdout.
 Everything else - handling of connections, I/O multiplexing (select, poll, epoll), handling socket metadata (getsockname, getpeername) - entierly happens in userland.   
@@ -127,8 +127,8 @@ They also run in an endless loop and have a lot of disk I/O (pidfiles, logfiles,
 Setting these targets up for fuzzing means to reduce the complexity of the applications.
 The following example demonstrates the modifications necessary to fuzz [vsftpd](https://security.appspot.com/vsftpd.html), a popular FTP server on Linux.
 
-### Fuzzing vsftpd
-#### Getting the source
+## Fuzzing vsftpd
+### Getting the source
 Download version 3.0.5 of vsftpd:
 ```sh
 wget https://security.appspot.com/downloads/vsftpd-3.0.5.tar.gz
@@ -136,7 +136,7 @@ tar -xf vsftpd-3.0.5.tar.gz
 cd vsftpd-3.0.5
 ```
 
-#### Patching the source
+### Patching the source
 vsftpd creates a new child process for each connection. We prohibit that
 by commenting out the code that does the fork in `standalone.c`:
 ```diff
@@ -239,7 +239,7 @@ leading to an infinite loop.
    (void) vsf_sysutil_write_loop(VSFTP_COMMAND_FD, "500 OOPS: ", 10);
 ```
 
-#### Build configuration
+### Build configuration
 In the `Makefile` replace:
 ```diff
 @@ -1,16 +1,16 @@
@@ -266,7 +266,7 @@ In the `Makefile` replace:
          tunables.o ftpdataio.o secbuf.o ls.o \
 ```
 
-#### Runtime configuration
+### Runtime configuration
 Like most other servers, vsftpd needs a config file. Create
 `fuzz.conf` with the following contents:
 ```
@@ -291,7 +291,7 @@ write_enable=NO
 download_enable=NO
 ```
 
-#### Start fuzzing
+### Start fuzzing
 To use the desocketing library with AFL we need to set the `AFL_PRELOAD`
 variable.
 ```sh
