@@ -10,7 +10,7 @@ tools emerged.
 These desocketing tools enabled network fuzzing without
 making a lot of additional modifications to the program under test
 and quickly became widely used in combination with AFL.&lt;/p>
-&lt;h3 id="what-is-desocketing">What is &amp;ldquo;desocketing&amp;rdquo;?&lt;/h3>
+&lt;h2 id="what-is-desocketing">What is &amp;ldquo;desocketing&amp;rdquo;?&lt;/h2>
 &lt;p>Before desocketing tools were published two common techniques for
 network fuzzing were&lt;/p>
 &lt;ol>
@@ -40,7 +40,7 @@ for debugging.&lt;/p>
 &lt;p>The following figure demonstrates how to desock nginx such that the network
 traffic becomes visible on a terminal.&lt;/p>
 &lt;p>&lt;img src="https://lolcads.github.io/2022/02/demo.svg" alt="">&lt;/p>
-&lt;h3 id="how-desocketing-works">How desocketing works&lt;/h3>
+&lt;h2 id="how-desocketing-works">How desocketing works&lt;/h2>
 &lt;p>Making desocketing libraries has its complexities.
 AFLplusplus' &lt;a href="https://github.com/AFLplusplus/AFLplusplus/tree/stable/utils/socket_fuzzing">socketfuzz&lt;/a>
 ships a desocketing library that just returns &lt;code>0&lt;/code> (stdin) in &lt;code>accept()&lt;/code>.
@@ -76,7 +76,7 @@ are multi-threaded&lt;/li>
 &lt;p>A better desocketing library is needed that is more resource-efficient and handles the complexities of
 modern network applications correctly.
 So we created a new desocketing library: &amp;ldquo;libdesock&amp;rdquo;.&lt;/p>
-&lt;h3 id="using-libdesock">Using libdesock&lt;/h3>
+&lt;h2 id="using-libdesock">Using libdesock&lt;/h2>
 &lt;p>libdesock fully emulates the network stack of the kernel. The kernel is only queried to obtain file
 descriptors and to do I/O on stdin and stdout.
 Everything else - handling of connections, I/O multiplexing (select, poll, epoll), handling socket metadata (getsockname, getpeername) - entierly happens in userland.&lt;br>
@@ -110,13 +110,13 @@ and sometimes custom allocators that don&amp;rsquo;t work with ASAN.
 They also run in an endless loop and have a lot of disk I/O (pidfiles, logfiles, temporary files).
 Setting these targets up for fuzzing means to reduce the complexity of the applications.
 The following example demonstrates the modifications necessary to fuzz &lt;a href="https://security.appspot.com/vsftpd.html">vsftpd&lt;/a>, a popular FTP server on Linux.&lt;/p>
-&lt;h3 id="fuzzing-vsftpd">Fuzzing vsftpd&lt;/h3>
-&lt;h4 id="getting-the-source">Getting the source&lt;/h4>
+&lt;h2 id="fuzzing-vsftpd">Fuzzing vsftpd&lt;/h2>
+&lt;h3 id="getting-the-source">Getting the source&lt;/h3>
 &lt;p>Download version 3.0.5 of vsftpd:&lt;/p>
 &lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-sh" data-lang="sh">wget https://security.appspot.com/downloads/vsftpd-3.0.5.tar.gz
 tar -xf vsftpd-3.0.5.tar.gz
 cd vsftpd-3.0.5
-&lt;/code>&lt;/pre>&lt;/div>&lt;h4 id="patching-the-source">Patching the source&lt;/h4>
+&lt;/code>&lt;/pre>&lt;/div>&lt;h3 id="patching-the-source">Patching the source&lt;/h3>
 &lt;p>vsftpd creates a new child process for each connection. We prohibit that
 by commenting out the code that does the fork in &lt;code>standalone.c&lt;/code>:&lt;/p>
 &lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-diff" data-lang="diff">&lt;span style="color:#75715e">@@ -153,6 +153,7 @@ vsf_standalone_main(void)
@@ -198,7 +198,7 @@ bug(const char* p_text)
 &lt;/span>&lt;span style="color:#a6e22e">&lt;/span> /* Rats. Try and write the reason to the network for diagnostics */
 vsf_sysutil_activate_noblock(VSFTP_COMMAND_FD);
 (void) vsf_sysutil_write_loop(VSFTP_COMMAND_FD, &amp;#34;500 OOPS: &amp;#34;, 10);
-&lt;/code>&lt;/pre>&lt;/div>&lt;h4 id="build-configuration">Build configuration&lt;/h4>
+&lt;/code>&lt;/pre>&lt;/div>&lt;h3 id="build-configuration">Build configuration&lt;/h3>
 &lt;p>In the &lt;code>Makefile&lt;/code> replace:&lt;/p>
 &lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-diff" data-lang="diff">&lt;span style="color:#75715e">@@ -1,16 +1,16 @@
 &lt;/span>&lt;span style="color:#75715e">&lt;/span> # Makefile for systems with GNU tools
@@ -221,7 +221,7 @@ LIBS = `./vsf_findlibs.sh`
 &lt;/span>&lt;span style="color:#a6e22e">&lt;/span>
 OBJS = main.o utility.o prelogin.o ftpcmdio.o postlogin.o privsock.o \
 tunables.o ftpdataio.o secbuf.o ls.o \
-&lt;/code>&lt;/pre>&lt;/div>&lt;h4 id="runtime-configuration">Runtime configuration&lt;/h4>
+&lt;/code>&lt;/pre>&lt;/div>&lt;h3 id="runtime-configuration">Runtime configuration&lt;/h3>
 &lt;p>Like most other servers, vsftpd needs a config file. Create
 &lt;code>fuzz.conf&lt;/code> with the following contents:&lt;/p>
 &lt;pre tabindex="0">&lt;code>listen=YES
@@ -240,7 +240,7 @@ pasv_address=127.0.0.1
 # Filesystem interactions
 write_enable=NO
 download_enable=NO
-&lt;/code>&lt;/pre>&lt;h4 id="start-fuzzing">Start fuzzing&lt;/h4>
+&lt;/code>&lt;/pre>&lt;h3 id="start-fuzzing">Start fuzzing&lt;/h3>
 &lt;p>To use the desocketing library with AFL we need to set the &lt;code>AFL_PRELOAD&lt;/code>
 variable.&lt;/p>
 &lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-sh" data-lang="sh">export AFL_PRELOAD&lt;span style="color:#f92672">=&lt;/span>libdesock.so
