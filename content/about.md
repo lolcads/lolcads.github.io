@@ -1,10 +1,9 @@
 ---
 title: "About"
-date: 2022-02-23T11:59:53+01:00
-draft: false
+readingTime: false
 toc: false
-author: lolcads
 ---
 
-TODO add about information
-
+This is a tech blog of loosly coupled individuals that like to sometimes play CTFs but mostly just have fun with deeply technical topics such as (malware) reverse engineering, fuzzing, vulnerability research, forensics, ...
+We hope you will find some valuable information on our site :)
+Get in touch if you want via  [Contact](/contact).
