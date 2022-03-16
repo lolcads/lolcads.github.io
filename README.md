@@ -2,7 +2,12 @@
 
 ## How to create new posts
 
-Make sure you have installed `hugo` (https://gohugo.io/getting-started/installing/). `hugo` must be run from the root directory of this repository (e.g. `/home/user/path/to/lolcads.github.io/`). Make also sure that everything renders just fine:
+First, ensure that the submodules of this repository are initialized, by running the following command from the root directory of this repository (e.g. `/home/user/path/to/lolcads.github.io/`):
+```
+$ git submodule update --init --recursive  
+```
+
+Make sure you have installed `hugo` (https://gohugo.io/getting-started/installing/). `hugo` must be run from the root directory of this repository. Make also sure that everything renders just fine:
 
 ```
 $ hugo server
