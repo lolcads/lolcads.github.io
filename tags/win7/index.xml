@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Win7 on lolcads tech blog</title><link>https://lolcads.github.io/tags/win7/</link><description>Recent content in Win7 on lolcads tech blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><copyright>&amp;copy; lolcads</copyright><lastBuildDate>Wed, 16 Mar 2022 12:01:43 +0100</lastBuildDate><atom:link href="https://lolcads.github.io/tags/win7/index.xml" rel="self" type="application/rss+xml"/><item><title>Installing new .NET versions on a Windows 7 VM</title><link>https://lolcads.github.io/posts/2022/03/win7_dotnet_install/</link><pubDate>Wed, 16 Mar 2022 12:01:43 +0100</pubDate><guid>https://lolcads.github.io/posts/2022/03/win7_dotnet_install/</guid><description>Installing new .NET versions on a Windows 7 VM In this post, I will explain how to install .NET Framework 4.8 on a Windows 7 VM.
+Motivation Virtual Machines running Microsoft Windows are frequently used for dynamic analysis of Windows executables. Windows 7 is still used for analysis VM, although it is no longer supported by Microsoft and ships with an outdated .NET version. If a sample requires a .NET version which is not present on the analysis VM, the execution fails and the file cannot be analysed.</description><content>&lt;h1 id="installing-new-net-versions-on-a-windows-7-vm">Installing new .NET versions on a Windows 7 VM&lt;/h1>
+&lt;p>In this post, I will explain how to install .NET Framework 4.8 on a Windows 7 VM.&lt;/p>
+&lt;h2 id="motivation">Motivation&lt;/h2>
+&lt;p>Virtual Machines running Microsoft Windows are frequently used for dynamic analysis of Windows executables.
+Windows 7 is still used for analysis VM, although it is no longer supported by Microsoft and ships with an outdated .NET version.
+If a sample requires a .NET version which is not present on the analysis VM, the execution fails and the file cannot be analysed.
+For this reason it might be required to install a recent .NET version on a Windows 7 VM.&lt;/p>
+&lt;h2 id="problem">Problem&lt;/h2>
+&lt;p>The .NET Framework 4.8 installer tries to verify the integritiy of the installation data prior to the installation.
+However, the root certificates required for this verification process are not present on Windows 7.
+&lt;img src="https://lolcads.github.io/2022/03/net_0.png" alt="Problem: the installation process fails">
+This issue cannot be fixed via Windows updates, as they are not available for Windows 7 anymore.&lt;/p>
+&lt;h2 id="solution">Solution&lt;/h2>
+&lt;p>First, download the &lt;a href="https://go.microsoft.com/fwlink/?linkid=2088631">offline installer for .NET Framework 4.8&lt;/a>&lt;/p>
+&lt;p>Execute the file. This will extract the installation data into a temporary subfolder of &lt;code>C:\&lt;/code> with a random name.
+&lt;img src="https://lolcads.github.io/2022/03/net_1.png" alt="Extraction of the installation data into a temporary directory">&lt;/p>
+&lt;p>Wait until the extraction process has finished and an installer opens. You don&amp;rsquo;t have to interact with this installer window at all. Just leave it opened to prevent the deletion of the temporary subfolder.
+&lt;img src="https://lolcads.github.io/2022/03/net_2.png" alt="Installer to be left opened">&lt;/p>
+&lt;p>Next, navigate to the temporary folder and execute the file &lt;code>netfx_Full_x64.msi&lt;/code> or &lt;code>netfx_Full_x86.msi&lt;/code>.
+This will trigger the installation of .NET Framework 4.8. Restart the system after the installation finished.
+&lt;img src="https://lolcads.github.io/2022/03/net_3.png" alt="Locating netfx_Full">&lt;/p>
+&lt;p>That&amp;rsquo;s it, you&amp;rsquo;re all set! :)&lt;/p></content></item></channel></rss>
