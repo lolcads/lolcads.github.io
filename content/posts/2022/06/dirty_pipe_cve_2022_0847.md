@@ -59,9 +59,10 @@ do_sys_openat2(int dfd, const char __user *filename, struct open_how *how)
 ...
 	fd = get_unused_fd_flags(how->flags);
 ...
-	struct file *f = do_filp_open(dfd, tmp, &op); // lolcads: maybe follow ... but don't get lost ;)
+	struct file *f = do_filp_open(dfd, tmp, &op); // lolcads: maybe follow ...
+	                                              // but don't get lost ;)
 ...
-	if (IS_ERR(f)) { // e.g. permission checks failed, doesn't exist...
+	if (IS_ERR(f)) { // lolcads: e.g. permission checks failed, doesn't exist...
 		put_unused_fd(fd);
 		fd = PTR_ERR(f);
 	} else {
@@ -562,13 +563,15 @@ struct pipe_inode_info *alloc_pipe_info(void)
 	struct user_struct *user = get_current_user();
 	unsigned long user_bufs;
 	unsigned int max_size = READ_ONCE(pipe_max_size);
-
-	pipe = kzalloc(sizeof(struct pipe_inode_info), GFP_KERNEL_ACCOUNT); // lolcads: allocate the inode info
+        
+	// lolcads: allocate the inode info
+	pipe = kzalloc(sizeof(struct pipe_inode_info), GFP_KERNEL_ACCOUNT);
 ...
-	pipe->bufs = kcalloc(pipe_bufs, sizeof(struct pipe_buffer), // lolcads: allocate the buffers with the page references
+	// lolcads: allocate the buffers with the page references
+	pipe->bufs = kcalloc(pipe_bufs, sizeof(struct pipe_buffer),
 			     GFP_KERNEL_ACCOUNT);
 
-	if (pipe->bufs) { // mc: set up the rest of the relevant fields
+	if (pipe->bufs) { // lolcads: set up the rest of the relevant fields
 		init_waitqueue_head(&pipe->rd_wait);
 		init_waitqueue_head(&pipe->wr_wait);
 		pipe->r_counter = pipe->w_counter = 1;
@@ -1009,8 +1012,8 @@ One of `fd_in` or `fd_out` must be a pipe. The other `fd_xxx` can be another pip
 
 ### The `splice` System Call (Implementation)
 
-The *very* high level idea of the `splice` implementation is illustrated in the following figure. After splicing, both, the pipe and the page cache, have different views of the same underlying data in memory.
-![](https://i.imgur.com/nHzmRxN.png)
+The *very* high level idea of the `splice` implementation is illustrated in the following figure. After splicing, both, the pipe and the page cache, have different views of the same underlying data in memory. *You might want to open this SVG image in a new tab and zoom in a bit.*
+![Pipe and Page Cache Overview](/2022/06/pipe_and_page_cache.svg)
 
 To see that this figure is correct, we start from the system call's entry point `SYSCALL_DEFINE6(splice,...)`, and first arrive at the function `__do_splice()` that is responsible for copying the offset values from and to user space. The called function `do_splice()` determines if we want to splice to, from or between pipes. In the first case the function 
 
@@ -1320,9 +1323,5 @@ When reading kernel source code for the first time, you might encounter some obs
       - processor architecture: go for `x86-64` if present, else take the generic version
 
 ## Conclusion
-TODO mc
 
-A detailed and streamlined analysis of any bug makes it seem shallow, however, don't get fooled by that impression. This bug happened to some of the best C programmers in the wold, was present for years in one of the most widely used OSs, took a professional programmer weeks to pin down, and making sense of it requires a conceptual understanding of two interacting subsystems of the Linux kernel. Root causing it without a PoC, blogpost, and patch at hand is a task that only few can do accomplish (but maybe this post can play a small role in incrementing this number in the future... :).
-In general, the nature of this bug makes it a great opportunity for learning about the kernel, and a *missing initialization* vulnerability is a welcome diversion from the [(ostensibly) prevailing](https://github.com/maddiestone/ConPresentations/blob/master/OffensiveCon2022.RealWorld0days.pdf) *memory corruption* issues. Furthermore, in contrast to, say some out-of-bounds write on the heap, the exploitation of this vulnerability is almost trivial, stability is not issue at all, and it works in the same way across a huge range of systems.
-While the latter points are probably responsible for its huge popularity, the former two make it a good case study for aspiring security researchers that want to get into kernel stuff. We hope that our setup makes understanding this bug more accessible and provides a good preparation for the inevitable bugs to come.
-
+A detailed and streamlined analysis of any bug makes it seem shallow, however, don't get fooled by that impression. Making sense of the bug requires a conceptual understanding of multiple interacting subsystems of the Linux kernel. A root cause analysis without a PoC, blog post, or patch at hand would be a tricky task. In general, the nature of this bug makes it a great opportunity to learn about the Linux kernel. A missing initialization is a welcome diversion from the ubiquitous memory corruption issues (that a lot of exploit developers love ;)). Furthermore, in contrast to those kind of vulnerabilities, the exploitation of this one is almost trivial, stable, and it works across a huge range of Linux distributions. Maybe you got motivated to check out some more complex vulnerabilities / exploits or the Linux kernel yourself :).
