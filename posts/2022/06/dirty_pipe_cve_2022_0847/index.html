@@ -151,9 +151,10 @@ tfd <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;./tar
 ...
 	fd <span style=color:#f92672>=</span> get_unused_fd_flags(how<span style=color:#f92672>-&gt;</span>flags);
 ...
-	<span style=color:#66d9ef>struct</span> file <span style=color:#f92672>*</span>f <span style=color:#f92672>=</span> do_filp_open(dfd, tmp, <span style=color:#f92672>&amp;</span>op); <span style=color:#75715e>// lolcads: maybe follow ... but don&#39;t get lost ;)
+	<span style=color:#66d9ef>struct</span> file <span style=color:#f92672>*</span>f <span style=color:#f92672>=</span> do_filp_open(dfd, tmp, <span style=color:#f92672>&amp;</span>op); <span style=color:#75715e>// lolcads: maybe follow ...
+</span><span style=color:#75715e></span>	                                              <span style=color:#75715e>// but don&#39;t get lost ;)
 </span><span style=color:#75715e></span>...
-	<span style=color:#66d9ef>if</span> (IS_ERR(f)) { <span style=color:#75715e>// e.g. permission checks failed, doesn&#39;t exist...
+	<span style=color:#66d9ef>if</span> (IS_ERR(f)) { <span style=color:#75715e>// lolcads: e.g. permission checks failed, doesn&#39;t exist...
 </span><span style=color:#75715e></span>		put_unused_fd(fd);
 		fd <span style=color:#f92672>=</span> PTR_ERR(f);
 	} <span style=color:#66d9ef>else</span> {
@@ -562,13 +563,15 @@ A directory is a list of inodes with their assigned names. The list includes an 
 </span><span style=color:#75715e></span>	<span style=color:#66d9ef>struct</span> user_struct <span style=color:#f92672>*</span>user <span style=color:#f92672>=</span> get_current_user();
 	<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>long</span> user_bufs;
 	<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> max_size <span style=color:#f92672>=</span> READ_ONCE(pipe_max_size);
+        
+	<span style=color:#75715e>// lolcads: allocate the inode info
+</span><span style=color:#75715e></span>	pipe <span style=color:#f92672>=</span> kzalloc(<span style=color:#66d9ef>sizeof</span>(<span style=color:#66d9ef>struct</span> pipe_inode_info), GFP_KERNEL_ACCOUNT);
+...
+	<span style=color:#75715e>// lolcads: allocate the buffers with the page references
+</span><span style=color:#75715e></span>	pipe<span style=color:#f92672>-&gt;</span>bufs <span style=color:#f92672>=</span> kcalloc(pipe_bufs, <span style=color:#66d9ef>sizeof</span>(<span style=color:#66d9ef>struct</span> pipe_buffer),
+			     GFP_KERNEL_ACCOUNT);
 
-	pipe <span style=color:#f92672>=</span> kzalloc(<span style=color:#66d9ef>sizeof</span>(<span style=color:#66d9ef>struct</span> pipe_inode_info), GFP_KERNEL_ACCOUNT); <span style=color:#75715e>// lolcads: allocate the inode info
-</span><span style=color:#75715e></span>...
-	pipe<span style=color:#f92672>-&gt;</span>bufs <span style=color:#f92672>=</span> kcalloc(pipe_bufs, <span style=color:#66d9ef>sizeof</span>(<span style=color:#66d9ef>struct</span> pipe_buffer), <span style=color:#75715e>// lolcads: allocate the buffers with the page references
-</span><span style=color:#75715e></span>			     GFP_KERNEL_ACCOUNT);
-
-	<span style=color:#66d9ef>if</span> (pipe<span style=color:#f92672>-&gt;</span>bufs) { <span style=color:#75715e>// mc: set up the rest of the relevant fields
+	<span style=color:#66d9ef>if</span> (pipe<span style=color:#f92672>-&gt;</span>bufs) { <span style=color:#75715e>// lolcads: set up the rest of the relevant fields
 </span><span style=color:#75715e></span>		init_waitqueue_head(<span style=color:#f92672>&amp;</span>pipe<span style=color:#f92672>-&gt;</span>rd_wait);
 		init_waitqueue_head(<span style=color:#f92672>&amp;</span>pipe<span style=color:#f92672>-&gt;</span>wr_wait);
 		pipe<span style=color:#f92672>-&gt;</span>r_counter <span style=color:#f92672>=</span> pipe<span style=color:#f92672>-&gt;</span>w_counter <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>;
@@ -945,8 +948,8 @@ DESCRIPTION
 </code></pre><p>As mentioned above, a process can obtain a file descriptor using the <code>sys_open</code> system call. If the process wishes to write the file content (or a part of it) into a pipe it has different options. It could <code>read()</code> the data from the file into a buffer in its memory (or <code>mmap()</code> the file) and then <code>write()</code> it to the pipe. However, this involves a total of three context switches (kernel-user-space boundary). To make this whole operation more efficient the Linux kernel implements the <code>sys_splice</code> system call. It essentially does the copying (not really a copy, see below) directly from one file descriptor to another one within the kernel space. As we will see, this makes a lot of sense because the content of a file or a pipe is already present in the kernel memory as a buffer or page or another structure.
 One of <code>fd_in</code> or <code>fd_out</code> must be a pipe. The other <code>fd_xxx</code> can be another pipe, a file, a socket, a block device, a character device. See Max Kellermann&rsquo;s original blog post for an example how splicing is used to optimize real-world software (and how this application lead him to finding this bug :) Check out <a href=https://web.archive.org/web/20130521163124/http://kerneltrap.org/node/6505>this</a> to read how Linus Torvalds himself explains the <code>splice</code> system call 8-)</p>
 <h3 id=the-splice-system-call-implementation>The <code>splice</code> System Call (Implementation)<a href=#the-splice-system-call-implementation class=hanchor arialabel=Anchor>&#8983;</a> </h3>
-<p>The <em>very</em> high level idea of the <code>splice</code> implementation is illustrated in the following figure. After splicing, both, the pipe and the page cache, have different views of the same underlying data in memory.
-<img src=https://i.imgur.com/nHzmRxN.png alt></p>
+<p>The <em>very</em> high level idea of the <code>splice</code> implementation is illustrated in the following figure. After splicing, both, the pipe and the page cache, have different views of the same underlying data in memory. <em>You might want to open this SVG image in a new tab and zoom in a bit.</em>
+<img src=/2022/06/pipe_and_page_cache.svg alt="Pipe and Page Cache Overview"></p>
 <p>To see that this figure is correct, we start from the system call&rsquo;s entry point <code>SYSCALL_DEFINE6(splice,...)</code>, and first arrive at the function <code>__do_splice()</code> that is responsible for copying the offset values from and to user space. The called function <code>do_splice()</code> determines if we want to splice to, from or between pipes. In the first case the function</p>
 <div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=color:#66d9ef>static</span> <span style=color:#66d9ef>long</span> <span style=color:#a6e22e>do_splice_to</span>(<span style=color:#66d9ef>struct</span> file <span style=color:#f92672>*</span>in, loff_t <span style=color:#f92672>*</span>ppos,
 			 <span style=color:#66d9ef>struct</span> pipe_inode_info <span style=color:#f92672>*</span>pipe, size_t len,
@@ -1206,10 +1209,7 @@ index b0e0acdf96c15e..6dd5330f7a9957 100644
 </li>
 </ul>
 <h2 id=conclusion>Conclusion<a href=#conclusion class=hanchor arialabel=Anchor>&#8983;</a> </h2>
-<p>TODO mc</p>
-<p>A detailed and streamlined analysis of any bug makes it seem shallow, however, don&rsquo;t get fooled by that impression. This bug happened to some of the best C programmers in the wold, was present for years in one of the most widely used OSs, took a professional programmer weeks to pin down, and making sense of it requires a conceptual understanding of two interacting subsystems of the Linux kernel. Root causing it without a PoC, blogpost, and patch at hand is a task that only few can do accomplish (but maybe this post can play a small role in incrementing this number in the future&mldr; :).
-In general, the nature of this bug makes it a great opportunity for learning about the kernel, and a <em>missing initialization</em> vulnerability is a welcome diversion from the <a href=https://github.com/maddiestone/ConPresentations/blob/master/OffensiveCon2022.RealWorld0days.pdf>(ostensibly) prevailing</a> <em>memory corruption</em> issues. Furthermore, in contrast to, say some out-of-bounds write on the heap, the exploitation of this vulnerability is almost trivial, stability is not issue at all, and it works in the same way across a huge range of systems.
-While the latter points are probably responsible for its huge popularity, the former two make it a good case study for aspiring security researchers that want to get into kernel stuff. We hope that our setup makes understanding this bug more accessible and provides a good preparation for the inevitable bugs to come.</p>
+<p>A detailed and streamlined analysis of any bug makes it seem shallow, however, don&rsquo;t get fooled by that impression. Making sense of the bug requires a conceptual understanding of multiple interacting subsystems of the Linux kernel. A root cause analysis without a PoC, blog post, or patch at hand would be a tricky task. In general, the nature of this bug makes it a great opportunity to learn about the Linux kernel. A missing initialization is a welcome diversion from the ubiquitous memory corruption issues (that a lot of exploit developers love ;)). Furthermore, in contrast to those kind of vulnerabilities, the exploitation of this one is almost trivial, stable, and it works across a huge range of Linux distributions. Maybe you got motivated to check out some more complex vulnerabilities / exploits or the Linux kernel yourself :).</p>
 </div></div>
 <div class=pagination>
 <div class=pagination__title>
