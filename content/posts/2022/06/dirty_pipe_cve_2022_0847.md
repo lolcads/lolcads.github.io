@@ -973,6 +973,7 @@ Besides reading and writing, the Linux programming interface also offers the `sp
     }
 ```
 [`⬀ go to source code`](https://github.com/vobst/lkd-cve/blob/main/lkd_examples/dirtypipe/poc.c#L76)
+
 Since this syscall may not be as well-known as the others, let's briefly discuss it from a user's perspective.
 
 ### The `splice` System Call (user land)
