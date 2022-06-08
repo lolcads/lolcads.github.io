@@ -287,7 +287,7 @@ static int do_pipe2(int __user *fildes, int flags)
     int fd[2];
     int error;
 
-    error = __do_pipe_flags(fd, files, flags); // mc: follow me
+    error = __do_pipe_flags(fd, files, flags);
     if (!error) {
         if (unlikely(copy_to_user(fildes, fd, sizeof(fd)))) {
             fput(files[0]);
