@@ -721,9 +721,12 @@ out:
 </code></pre><p><a href=https://elixir.bootlin.com/linux/v5.17.9/source/fs/pipe.c#L416><code>⬀ go to source code</code></a></p>
 <p>When handling a <code>write()</code> to a pipe, the kernel differentiates between two cases. First it checks if it can append (at least a part of) the data to <code>page</code> of the <code>pipe_buffer</code> that is currently the <code>head</code> of the ring. Whether or not this is possible is decided by three things:</p>
 <ul>
-<li>is the pipe non-empty (line 23)</li>
-<li>is the <code>PIPE_BUF_FLAG_CAN_MERGE</code> flag set? (line 28)</li>
-<li>is there is enough space left on the page? (line 29)</li>
+<li>is the pipe non-empty when we start writing? (implies that there are initialized buffers available)
+<code>!was_empty</code></li>
+<li>is the <code>PIPE_BUF_FLAG_CAN_MERGE</code> flag set?
+<code>buf->flags & PIPE_BUF_FLAG_CAN_MERGE</code></li>
+<li>is there is enough space left on the page?
+<code>offset + chars &lt;= PAGE_SIZE</code></li>
 </ul>
 <p>If the answer to all of those questions is <em>yes</em> the kernel starts the write by appending to the existing page.</p>
 <p>To complete the rest of the write the kernel advances the <code>head</code> to the next <code>pipe_buffer</code>, allocates a fresh <code>page</code> for it, initializes the flags (the<code>PIPE_BUF_FLAG_CAN_MERGE</code> flag will be set, unless the user explicitly asked for the pipe to be in <code>O_DIRECT</code> mode), and writes the data to the beginning of the new page. This continues until there is no data left to write (or the pipe is full). Regarding the <code>O_DIRECT</code> mode of <code>pipe()</code>:</p>
