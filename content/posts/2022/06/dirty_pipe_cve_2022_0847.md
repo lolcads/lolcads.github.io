@@ -739,9 +739,12 @@ out:
 
 When handling a `write()` to a pipe, the kernel differentiates between two cases. First it checks if it can append (at least a part of) the data to `page` of the `pipe_buffer` that is currently the `head` of the ring. Whether or not this is possible is decided by three things: 
 
-- is the pipe non-empty (line 23)
-- is the `PIPE_BUF_FLAG_CAN_MERGE` flag set? (line 28)
-- is there is enough space left on the page? (line 29)
+- is the pipe non-empty when we start writing? (implies that there are initialized buffers available)
+`!was_empty`
+- is the `PIPE_BUF_FLAG_CAN_MERGE` flag set?
+  `buf->flags & PIPE_BUF_FLAG_CAN_MERGE`
+- is there is enough space left on the page?
+  `offset + chars <= PAGE_SIZE`
 
 If the answer to all of those questions is *yes* the kernel starts the write by appending to the existing page.
 
