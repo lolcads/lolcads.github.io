@@ -328,8 +328,8 @@ pause_for_inspection(<span style=color:#e6db74>&#34;About to create pipe()&#34;<
     <span style=color:#66d9ef>int</span> fd[<span style=color:#ae81ff>2</span>];
     <span style=color:#66d9ef>int</span> error;
 
-    error <span style=color:#f92672>=</span> __do_pipe_flags(fd, files, flags); <span style=color:#75715e>// mc: follow me
-</span><span style=color:#75715e></span>    <span style=color:#66d9ef>if</span> (<span style=color:#f92672>!</span>error) {
+    error <span style=color:#f92672>=</span> __do_pipe_flags(fd, files, flags);
+    <span style=color:#66d9ef>if</span> (<span style=color:#f92672>!</span>error) {
         <span style=color:#66d9ef>if</span> (unlikely(copy_to_user(fildes, fd, <span style=color:#66d9ef>sizeof</span>(fd)))) {
             fput(files[<span style=color:#ae81ff>0</span>]);
             fput(files[<span style=color:#ae81ff>1</span>]);
@@ -914,8 +914,8 @@ struct pipe_buffer at 0xffff888101f8a180
     <span style=color:#66d9ef>if</span> (splice(tfd, <span style=color:#ae81ff>0</span>, pipefds[<span style=color:#ae81ff>1</span>], <span style=color:#ae81ff>0</span>, <span style=color:#ae81ff>5</span>, <span style=color:#ae81ff>0</span>) <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>0</span>) {
         exit(<span style=color:#ae81ff>1</span>);
     }
-</code></pre></div><p><a href=https://github.com/vobst/lkd-cve/blob/main/lkd_examples/dirtypipe/poc.c#L76><code>⬀ go to source code</code></a>
-Since this syscall may not be as well-known as the others, let&rsquo;s briefly discuss it from a user&rsquo;s perspective.</p>
+</code></pre></div><p><a href=https://github.com/vobst/lkd-cve/blob/main/lkd_examples/dirtypipe/poc.c#L76><code>⬀ go to source code</code></a></p>
+<p>Since this syscall may not be as well-known as the others, let&rsquo;s briefly discuss it from a user&rsquo;s perspective.</p>
 <h3 id=the-splice-system-call-user-land>The <code>splice</code> System Call (user land)<a href=#the-splice-system-call-user-land class=hanchor arialabel=Anchor>&#8983;</a> </h3>
 <pre tabindex=0><code>SPLICE(2)                       Linux Programmer's Manual                      SPLICE(2)
 
