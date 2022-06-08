@@ -51,25 +51,25 @@ The kernel function handling our `open` user space call is `do_sys_openat2()`. I
 static long
 do_sys_openat2(int dfd, const char __user *filename, struct open_how *how)
 {
-	struct open_flags op;
-	int fd = build_open_flags(how, &op);
-	struct filename *tmp;
+    struct open_flags op;
+    int fd = build_open_flags(how, &op);
+    struct filename *tmp;
 ...
     tmp = getname(filename);
 ...
-	fd = get_unused_fd_flags(how->flags);
+    fd = get_unused_fd_flags(how->flags);
 ...
-	struct file *f = do_filp_open(dfd, tmp, &op); // lolcads: maybe follow ...
-	                                              // but don't get lost ;)
+    struct file *f = do_filp_open(dfd, tmp, &op); // lolcads: maybe follow ...
+                                                  // but don't get lost ;)
 ...
-	if (IS_ERR(f)) { // lolcads: e.g. permission checks failed, doesn't exist...
-		put_unused_fd(fd);
-		fd = PTR_ERR(f);
-	} else {
-		fsnotify_open(f);
-		fd_install(fd, f);
-	}
-	putname(tmp);
+    if (IS_ERR(f)) { // lolcads: e.g. permission checks failed, doesn't exist...
+        put_unused_fd(fd);
+        fd = PTR_ERR(f);
+    } else {
+        fsnotify_open(f);
+        fd_install(fd, f);
+    }
+    putname(tmp);
     return fd; // lolcads: breakpoint 1
 }
 ```
@@ -79,11 +79,11 @@ Following the call to `do_filp_open()` bears the danger of getting lost in the j
 ```c
 struct file {
 ...
-	struct path                     f_path;
-	struct inode	            	*f_inode;
-	const struct file_operations	*f_op;
+    struct path                  f_path;
+    struct inode                 *f_inode;
+    const struct file_operations *f_op;
 ...
-	struct address_space        	*f_mapping;
+    struct address_space         *f_mapping;
 ...
 };
 ```
@@ -92,13 +92,13 @@ struct file {
 Importantly, the `f_mapping` field leads us to the `struct address_space` that represents the page cache object associated to the file. The `a_ops` field points to implementations of typical operations one might want to perform on a page cache object e.g., reading ahead, marking pages as dirty or writing back dirty pages, and so on.
 ```c
 struct address_space {
-	struct inode		*host;
-	struct xarray		i_pages;
+    struct inode        *host;
+    struct xarray       i_pages;
 ...
-	unsigned long		nrpages;
-	pgoff_t                 writeback_index;
-	const struct address_space_operations *a_ops;
-	unsigned long		flags;
+    unsigned long       nrpages;
+    pgoff_t             writeback_index;
+    const struct address_space_operations *a_ops;
+    unsigned long       flags;
 ...
 }
 ```
@@ -107,40 +107,40 @@ struct address_space {
 The actual cached data lies on one or more pages somewhere in physical memory. Each and every page of physical memory is described by a `struct page`. An [extendable array](https://lwn.net/Articles/745073/) (`struct xarray`) containing pointers to those page structs can be found in the `i_pages` field of the `struct address_space`.
 ```c
 struct page {
-	unsigned long flags;
+    unsigned long flags;
 ...
     /* Page cache and anonymous pages */
-	struct address_space *mapping;
-	pgoff_t index;		/* Our offset within mapping. */
+    struct address_space *mapping;
+    pgoff_t index;        /* Our offset within mapping. */
 ...
-	/*
-	 * If the page can be mapped to userspace, encodes the number
-	 * of times this page is referenced by a page table.
-	 */
-	atomic_t _mapcount;
-	/*
-	 * If the page is neither PageSlab nor mappable to userspace,
-	 * the value stored here may help determine what this page
-	 * is used for.  See page-flags.h for a list of page types
-	 * which are currently stored here.
-	 */
-	unsigned int page_type;
+    /*
+     * If the page can be mapped to userspace, encodes the number
+     * of times this page is referenced by a page table.
+     */
+    atomic_t _mapcount;
+    /*
+     * If the page is neither PageSlab nor mappable to userspace,
+     * the value stored here may help determine what this page
+     * is used for.  See page-flags.h for a list of page types
+     * which are currently stored here.
+     */
+    unsigned int page_type;
 ...
-	/* Usage count. *DO NOT USE DIRECTLY*. See page_ref.h */
-	atomic_t _refcount;
+    /* Usage count. *DO NOT USE DIRECTLY*. See page_ref.h */
+    atomic_t _refcount;
 ...
-	/*
-	 * On machines where all RAM is mapped into kernel address space,
-	 * we can simply calculate the virtual address. On machines with
-	 * highmem some memory is mapped into kernel virtual memory
-	 * dynamically, so we need a place to store that address.
-	 * Note that this field could be 16 bits on x86 ... ;)
-	 *
-	 * Architectures with slow multiplication can define
-	 * WANT_PAGE_VIRTUAL in asm/page.h
-	 */
-	void *virtual;	/* Kernel virtual address (NULL if
-					   not kmapped, ie. highmem) */
+    /*
+     * On machines where all RAM is mapped into kernel address space,
+     * we can simply calculate the virtual address. On machines with
+     * highmem some memory is mapped into kernel virtual memory
+     * dynamically, so we need a place to store that address.
+     * Note that this field could be 16 bits on x86 ... ;)
+     *
+     * Architectures with slow multiplication can define
+     * WANT_PAGE_VIRTUAL in asm/page.h
+     */
+    void *virtual;    /* Kernel virtual address (NULL if
+                       not kmapped, ie. highmem) */
 }
 ```
 [`⬀ go to source code`](https://elixir.bootlin.com/linux/v5.17.9/source/include/linux/mm_types.h#L72)
@@ -276,31 +276,31 @@ Our system call is handled by the kernel function `do_pipe2`.
 ```c
 SYSCALL_DEFINE1(pipe, int __user *, fildes)
 {
-	return do_pipe2(fildes, 0);
+    return do_pipe2(fildes, 0);
 }
 ```
 [`⬀ go to source code`](https://elixir.bootlin.com/linux/v5.17.9/source/fs/pipe.c#L1026)
 ```c
 static int do_pipe2(int __user *fildes, int flags)
 {
-	struct file *files[2];
-	int fd[2];
-	int error;
+    struct file *files[2];
+    int fd[2];
+    int error;
 
-	error = __do_pipe_flags(fd, files, flags); // mc: follow me
-	if (!error) {
-		if (unlikely(copy_to_user(fildes, fd, sizeof(fd)))) {
-			fput(files[0]);
-			fput(files[1]);
-			put_unused_fd(fd[0]);
-			put_unused_fd(fd[1]);
-			error = -EFAULT;
-		} else {
-			fd_install(fd[0], files[0]);
-			fd_install(fd[1], files[1]);
-		}
-	}
-	return error;
+    error = __do_pipe_flags(fd, files, flags); // mc: follow me
+    if (!error) {
+        if (unlikely(copy_to_user(fildes, fd, sizeof(fd)))) {
+            fput(files[0]);
+            fput(files[1]);
+            put_unused_fd(fd[0]);
+            put_unused_fd(fd[1]);
+            error = -EFAULT;
+        } else {
+            fd_install(fd[0], files[0]);
+            fd_install(fd[1], files[1]);
+        }
+    }
+    return error;
 }
 ```
 [`⬀ go to source code`](https://elixir.bootlin.com/linux/v5.17.9/source/fs/pipe.c#L1004)
@@ -355,15 +355,15 @@ A directory is a list of inodes with their assigned names. The list includes an 
 The `i_fop` field of the inode contains a pointer to a `struct file_operations`. This structure holds function pointers to the implementations of the various operations that can be performed on the pipe. Importantly, those include the functions the kernel will use to handle a process' request to `read()` or `write()` the pipe.
 ```c
 const struct file_operations pipefifo_fops = {
-	.open		= fifo_open,
-	.llseek		= no_llseek,
-	.read_iter	= pipe_read,
-	.write_iter	= pipe_write,
-	.poll		= pipe_poll,
-	.unlocked_ioctl	= pipe_ioctl,
-	.release	= pipe_release,
-	.fasync		= pipe_fasync,
-	.splice_write	= iter_file_splice_write,
+    .open           = fifo_open,
+    .llseek         = no_llseek,
+    .read_iter      = pipe_read,
+    .write_iter     = pipe_write,
+    .poll           = pipe_poll,
+    .unlocked_ioctl = pipe_ioctl,
+    .release        = pipe_release,
+    .fasync         = pipe_fasync,
+    .splice_write   = iter_file_splice_write,
 };
 ```
 [`⬀ go to source code`](https://elixir.bootlin.com/linux/v5.17.9/source/fs/pipe.c#L1218)
@@ -374,53 +374,53 @@ The pipe-specific part of the inode is mostly contained in the `struct pipe_inod
 
 ```c
 /**
- *	struct pipe_inode_info - a linux kernel pipe
- *	@mutex: mutex protecting the whole thing
- *	@rd_wait: reader wait point in case of empty pipe
- *	@wr_wait: writer wait point in case of full pipe
- *	@head: The point of buffer production
- *	@tail: The point of buffer consumption
- *	@note_loss: The next read() should insert a data-lost message
- *	@max_usage: The maximum number of slots that may be used in the ring
- *	@ring_size: total number of buffers (should be a power of 2)
- *	@nr_accounted: The amount this pipe accounts for in user->pipe_bufs
- *	@tmp_page: cached released page
- *	@readers: number of current readers of this pipe
- *	@writers: number of current writers of this pipe
- *	@files: number of struct file referring this pipe (protected by ->i_lock)
- *	@r_counter: reader counter
- *	@w_counter: writer counter
- *	@poll_usage: is this pipe used for epoll, which has crazy wakeups?
- *	@fasync_readers: reader side fasync
- *	@fasync_writers: writer side fasync
- *	@bufs: the circular array of pipe buffers
- *	@user: the user who created this pipe
- *	@watch_queue: If this pipe is a watch_queue, this is the stuff for that
+ *    struct pipe_inode_info - a linux kernel pipe
+ *    @mutex: mutex protecting the whole thing
+ *    @rd_wait: reader wait point in case of empty pipe
+ *    @wr_wait: writer wait point in case of full pipe
+ *    @head: The point of buffer production
+ *    @tail: The point of buffer consumption
+ *    @note_loss: The next read() should insert a data-lost message
+ *    @max_usage: The maximum number of slots that may be used in the ring
+ *    @ring_size: total number of buffers (should be a power of 2)
+ *    @nr_accounted: The amount this pipe accounts for in user->pipe_bufs
+ *    @tmp_page: cached released page
+ *    @readers: number of current readers of this pipe
+ *    @writers: number of current writers of this pipe
+ *    @files: number of struct file referring this pipe (protected by ->i_lock)
+ *    @r_counter: reader counter
+ *    @w_counter: writer counter
+ *    @poll_usage: is this pipe used for epoll, which has crazy wakeups?
+ *    @fasync_readers: reader side fasync
+ *    @fasync_writers: writer side fasync
+ *    @bufs: the circular array of pipe buffers
+ *    @user: the user who created this pipe
+ *    @watch_queue: If this pipe is a watch_queue, this is the stuff for that
  **/
 struct pipe_inode_info {
-	struct mutex mutex;
-	wait_queue_head_t rd_wait, wr_wait;
-	unsigned int head;
-	unsigned int tail;
-	unsigned int max_usage;
-	unsigned int ring_size;
+    struct mutex mutex;
+    wait_queue_head_t rd_wait, wr_wait;
+    unsigned int head;
+    unsigned int tail;
+    unsigned int max_usage;
+    unsigned int ring_size;
 #ifdef CONFIG_WATCH_QUEUE
-	bool note_loss;
+    bool note_loss;
 #endif
-	unsigned int nr_accounted;
-	unsigned int readers;
-	unsigned int writers;
-	unsigned int files;
-	unsigned int r_counter;
-	unsigned int w_counter;
-	unsigned int poll_usage;
-	struct page *tmp_page;
-	struct fasync_struct *fasync_readers;
-	struct fasync_struct *fasync_writers;
-	struct pipe_buffer *bufs;
-	struct user_struct *user;
+    unsigned int nr_accounted;
+    unsigned int readers;
+    unsigned int writers;
+    unsigned int files;
+    unsigned int r_counter;
+    unsigned int w_counter;
+    unsigned int poll_usage;
+    struct page *tmp_page;
+    struct fasync_struct *fasync_readers;
+    struct fasync_struct *fasync_writers;
+    struct pipe_buffer *bufs;
+    struct user_struct *user;
 #ifdef CONFIG_WATCH_QUEUE
-	struct watch_queue *watch_queue;
+    struct watch_queue *watch_queue;
 #endif
 };
 ```
@@ -430,20 +430,20 @@ At this point we can get a first idea of how pipes are implemented. On a high le
 
 ```c
 /**
- *	struct pipe_buffer - a linux kernel pipe buffer
- *	@page: the page containing the data for the pipe buffer
- *	@offset: offset of data inside the @page
- *	@len: length of data inside the @page
- *	@ops: operations associated with this buffer. See @pipe_buf_operations.
- *	@flags: pipe buffer flags. See above.
- *	@private: private data owned by the ops.
+ *    struct pipe_buffer - a linux kernel pipe buffer
+ *    @page: the page containing the data for the pipe buffer
+ *    @offset: offset of data inside the @page
+ *    @len: length of data inside the @page
+ *    @ops: operations associated with this buffer. See @pipe_buf_operations.
+ *    @flags: pipe buffer flags. See above.
+ *    @private: private data owned by the ops.
  **/
 struct pipe_buffer {
-	struct page *page;
-	unsigned int offset, len;
-	const struct pipe_buf_operations *ops;
-	unsigned int flags;                       
-	unsigned long private;
+    struct page *page;
+    unsigned int offset, len;
+    const struct pipe_buf_operations *ops;
+    unsigned int flags;                       
+    unsigned long private;
 };
 ```
 [`⬀ go to source code`](https://elixir.bootlin.com/linux/v5.17.9/source/include/linux/pipe_fs_i.h#L26)
@@ -471,19 +471,19 @@ We can also follow the setup of the pipe in the kernel source code. The initiali
 ```c
 static int __do_pipe_flags(int *fd, struct file **files, int flags)
 {
-	int error;
-	int fdw, fdr;
+    int error;
+    int fdw, fdr;
 ...
-	error = create_pipe_files(files, flags);
+    error = create_pipe_files(files, flags);
 ...
-	fdr = get_unused_fd_flags(flags);
+    fdr = get_unused_fd_flags(flags);
 ...
-	fdw = get_unused_fd_flags(flags);
+    fdw = get_unused_fd_flags(flags);
 ...
-	audit_fd_pair(fdr, fdw);
-	fd[0] = fdr;
-	fd[1] = fdw;
-	return 0;
+    audit_fd_pair(fdr, fdw);
+    fd[0] = fdr;
+    fd[1] = fdw;
+    return 0;
 ...
 }
 ```
@@ -494,25 +494,25 @@ The backing files are initialized in `create_pipe_files()`. We can see that both
 ```c
 int create_pipe_files(struct file **res, int flags)
 {
-	struct inode *inode = get_pipe_inode();
-	struct file *f;
-	int error;
+    struct inode *inode = get_pipe_inode();
+    struct file *f;
+    int error;
 ...
-	f = alloc_file_pseudo(inode, pipe_mnt, "",
-				O_WRONLY | (flags & (O_NONBLOCK | O_DIRECT)),
-				&pipefifo_fops);
+    f = alloc_file_pseudo(inode, pipe_mnt, "",
+                O_WRONLY | (flags & (O_NONBLOCK | O_DIRECT)),
+                &pipefifo_fops);
 ...
 
-	f->private_data = inode->i_pipe;
+    f->private_data = inode->i_pipe;
 
-	res[0] = alloc_file_clone(f, O_RDONLY | (flags & O_NONBLOCK),
-				  &pipefifo_fops);
+    res[0] = alloc_file_clone(f, O_RDONLY | (flags & O_NONBLOCK),
+                  &pipefifo_fops);
 ...
-	res[0]->private_data = inode->i_pipe;
-	res[1] = f;
-	stream_open(inode, res[0]);
-	stream_open(inode, res[1]);
-	return 0;
+    res[0]->private_data = inode->i_pipe;
+    res[1] = f;
+    stream_open(inode, res[0]);
+    stream_open(inode, res[1]);
+    return 0;
 }
 ```
 [`⬀ go to source code`](https://elixir.bootlin.com/linux/v5.17.9/source/fs/pipe.c#L911)
@@ -522,31 +522,31 @@ The initialization of the common inode structure happens in `get_pipe_inode()`. 
 ```c
 static struct inode *get_pipe_inode(void)
 {
-	struct inode *inode = new_inode_pseudo(pipe_mnt->mnt_sb);
-	struct pipe_inode_info *pipe;
+    struct inode *inode = new_inode_pseudo(pipe_mnt->mnt_sb);
+    struct pipe_inode_info *pipe;
 ...
-	inode->i_ino = get_next_ino();
+    inode->i_ino = get_next_ino();
 
-	pipe = alloc_pipe_info();
+    pipe = alloc_pipe_info();
 ...
-	inode->i_pipe = pipe;
-	pipe->files = 2;
-	pipe->readers = pipe->writers = 1;
-	inode->i_fop = &pipefifo_fops; // lolcads: see description below
+    inode->i_pipe = pipe;
+    pipe->files = 2;
+    pipe->readers = pipe->writers = 1;
+    inode->i_fop = &pipefifo_fops; // lolcads: see description below
 
-	/*
-	 * Mark the inode dirty from the very beginning,
-	 * that way it will never be moved to the dirty
-	 * list because "mark_inode_dirty()" will think
-	 * that it already _is_ on the dirty list.
-	 */
-	inode->i_state = I_DIRTY;
-	inode->i_mode = S_IFIFO | S_IRUSR | S_IWUSR;
-	inode->i_uid = current_fsuid();
-	inode->i_gid = current_fsgid();
-	inode->i_atime = inode->i_mtime = inode->i_ctime = current_time(inode);
+    /*
+     * Mark the inode dirty from the very beginning,
+     * that way it will never be moved to the dirty
+     * list because "mark_inode_dirty()" will think
+     * that it already _is_ on the dirty list.
+     */
+    inode->i_state = I_DIRTY;
+    inode->i_mode = S_IFIFO | S_IRUSR | S_IWUSR;
+    inode->i_uid = current_fsuid();
+    inode->i_gid = current_fsgid();
+    inode->i_atime = inode->i_mtime = inode->i_ctime = current_time(inode);
 
-	return inode;
+    return inode;
 ...
 }
 ```
@@ -558,30 +558,30 @@ Most of the pipe-specific setup happens is `alloc_pipe_info()`. Here you can see
 ```c
 struct pipe_inode_info *alloc_pipe_info(void)
 {
-	struct pipe_inode_info *pipe;
-	unsigned long pipe_bufs = PIPE_DEF_BUFFERS; // lolcads: defaults to 16
-	struct user_struct *user = get_current_user();
-	unsigned long user_bufs;
-	unsigned int max_size = READ_ONCE(pipe_max_size);
+    struct pipe_inode_info *pipe;
+    unsigned long pipe_bufs = PIPE_DEF_BUFFERS; // lolcads: defaults to 16
+    struct user_struct *user = get_current_user();
+    unsigned long user_bufs;
+    unsigned int max_size = READ_ONCE(pipe_max_size);
         
-	// lolcads: allocate the inode info
-	pipe = kzalloc(sizeof(struct pipe_inode_info), GFP_KERNEL_ACCOUNT);
+    // lolcads: allocate the inode info
+    pipe = kzalloc(sizeof(struct pipe_inode_info), GFP_KERNEL_ACCOUNT);
 ...
-	// lolcads: allocate the buffers with the page references
-	pipe->bufs = kcalloc(pipe_bufs, sizeof(struct pipe_buffer),
-			     GFP_KERNEL_ACCOUNT);
+    // lolcads: allocate the buffers with the page references
+    pipe->bufs = kcalloc(pipe_bufs, sizeof(struct pipe_buffer),
+                 GFP_KERNEL_ACCOUNT);
 
-	if (pipe->bufs) { // lolcads: set up the rest of the relevant fields
-		init_waitqueue_head(&pipe->rd_wait);
-		init_waitqueue_head(&pipe->wr_wait);
-		pipe->r_counter = pipe->w_counter = 1;
-		pipe->max_usage = pipe_bufs;
-		pipe->ring_size = pipe_bufs;
-		pipe->nr_accounted = pipe_bufs;
-		pipe->user = user;
-		mutex_init(&pipe->mutex);
-		return pipe;
-	}
+    if (pipe->bufs) { // lolcads: set up the rest of the relevant fields
+        init_waitqueue_head(&pipe->rd_wait);
+        init_waitqueue_head(&pipe->wr_wait);
+        pipe->r_counter = pipe->w_counter = 1;
+        pipe->max_usage = pipe_bufs;
+        pipe->ring_size = pipe_bufs;
+        pipe->nr_accounted = pipe_bufs;
+        pipe->user = user;
+        mutex_init(&pipe->mutex);
+        return pipe;
+    }
 ...
 }
 ```
@@ -638,101 +638,101 @@ By looking at the file operations of a pipe inode we can see that `write`s to a 
 static ssize_t
 pipe_write(struct kiocb *iocb, struct iov_iter *from)
 {
-	struct file *filp = iocb->ki_filp;
-	struct pipe_inode_info *pipe = filp->private_data;
-	unsigned int head;
-	ssize_t ret = 0;
-	size_t total_len = iov_iter_count(from);
-	ssize_t chars;
-	bool was_empty = false;
+    struct file *filp = iocb->ki_filp;
+    struct pipe_inode_info *pipe = filp->private_data;
+    unsigned int head;
+    ssize_t ret = 0;
+    size_t total_len = iov_iter_count(from);
+    ssize_t chars;
+    bool was_empty = false;
 ...
-	/*
-	 * If it wasn't empty we try to merge new data into
-	 * the last buffer.
-	 *
-	 * That naturally merges small writes, but it also
-	 * page-aligns the rest of the writes for large writes
-	 * spanning multiple pages.
-	 */
-	head = pipe->head;
-	was_empty = pipe_empty(head, pipe->tail);
-	chars = total_len & (PAGE_SIZE-1);
-	if (chars && !was_empty) {
-		unsigned int mask = pipe->ring_size - 1;
-		struct pipe_buffer *buf = &pipe->bufs[(head - 1) & mask];
-		int offset = buf->offset + buf->len;
+    /*
+     * If it wasn't empty we try to merge new data into
+     * the last buffer.
+     *
+     * That naturally merges small writes, but it also
+     * page-aligns the rest of the writes for large writes
+     * spanning multiple pages.
+     */
+    head = pipe->head;
+    was_empty = pipe_empty(head, pipe->tail);
+    chars = total_len & (PAGE_SIZE-1);
+    if (chars && !was_empty) {
+        unsigned int mask = pipe->ring_size - 1;
+        struct pipe_buffer *buf = &pipe->bufs[(head - 1) & mask];
+        int offset = buf->offset + buf->len;
 
-		if ((buf->flags & PIPE_BUF_FLAG_CAN_MERGE) &&
-		    offset + chars <= PAGE_SIZE) {
+        if ((buf->flags & PIPE_BUF_FLAG_CAN_MERGE) &&
+            offset + chars <= PAGE_SIZE) {
 ...
-			ret = copy_page_from_iter(buf->page, offset, chars, from);
+            ret = copy_page_from_iter(buf->page, offset, chars, from);
 ...
-			buf->len += ret;
-			if (!iov_iter_count(from))
-				goto out;
-		}
-	}
+            buf->len += ret;
+            if (!iov_iter_count(from))
+                goto out;
+        }
+    }
 
-	for (;;) {
+    for (;;) {
 ...
-		head = pipe->head;
-		if (!pipe_full(head, pipe->tail, pipe->max_usage)) {
-			unsigned int mask = pipe->ring_size - 1;
-			struct pipe_buffer *buf = &pipe->bufs[head & mask];
-			struct page *page = pipe->tmp_page;
-			int copied;
+        head = pipe->head;
+        if (!pipe_full(head, pipe->tail, pipe->max_usage)) {
+            unsigned int mask = pipe->ring_size - 1;
+            struct pipe_buffer *buf = &pipe->bufs[head & mask];
+            struct page *page = pipe->tmp_page;
+            int copied;
 
-			if (!page) {
-				page = alloc_page(GFP_HIGHUSER | __GFP_ACCOUNT);
+            if (!page) {
+                page = alloc_page(GFP_HIGHUSER | __GFP_ACCOUNT);
 ...
-				pipe->tmp_page = page;
-			}
+                pipe->tmp_page = page;
+            }
 
-			/* Allocate a slot in the ring in advance and attach an
-			 * empty buffer.  If we fault or otherwise fail to use
-			 * it, either the reader will consume it or it'll still
-			 * be there for the next write.
-			 */
-			spin_lock_irq(&pipe->rd_wait.lock);
+            /* Allocate a slot in the ring in advance and attach an
+             * empty buffer.  If we fault or otherwise fail to use
+             * it, either the reader will consume it or it'll still
+             * be there for the next write.
+             */
+            spin_lock_irq(&pipe->rd_wait.lock);
 
-			head = pipe->head;
-			if (pipe_full(head, pipe->tail, pipe->max_usage)) {
-				spin_unlock_irq(&pipe->rd_wait.lock);
-				continue;
-			}
+            head = pipe->head;
+            if (pipe_full(head, pipe->tail, pipe->max_usage)) {
+                spin_unlock_irq(&pipe->rd_wait.lock);
+                continue;
+            }
 
-			pipe->head = head + 1;
-			spin_unlock_irq(&pipe->rd_wait.lock);
+            pipe->head = head + 1;
+            spin_unlock_irq(&pipe->rd_wait.lock);
 
-			/* Insert it into the buffer array */
-			buf = &pipe->bufs[head & mask];
-			buf->page = page;
-			buf->ops = &anon_pipe_buf_ops;
-			buf->offset = 0;
-			buf->len = 0;
-			if (is_packetized(filp))
-				buf->flags = PIPE_BUF_FLAG_PACKET;
-			else
-				buf->flags = PIPE_BUF_FLAG_CAN_MERGE;
-			pipe->tmp_page = NULL;
+            /* Insert it into the buffer array */
+            buf = &pipe->bufs[head & mask];
+            buf->page = page;
+            buf->ops = &anon_pipe_buf_ops;
+            buf->offset = 0;
+            buf->len = 0;
+            if (is_packetized(filp))
+                buf->flags = PIPE_BUF_FLAG_PACKET;
+            else
+                buf->flags = PIPE_BUF_FLAG_CAN_MERGE;
+            pipe->tmp_page = NULL;
 
-			copied = copy_page_from_iter(page, 0, PAGE_SIZE, from);
+            copied = copy_page_from_iter(page, 0, PAGE_SIZE, from);
 ...
-			ret += copied;
-			buf->offset = 0;
-			buf->len = copied;
+            ret += copied;
+            buf->offset = 0;
+            buf->len = copied;
 
-			if (!iov_iter_count(from))
-				break;
-		}
+            if (!iov_iter_count(from))
+                break;
+        }
 
-		if (!pipe_full(head, pipe->tail, pipe->max_usage))
-			continue;
+        if (!pipe_full(head, pipe->tail, pipe->max_usage))
+            continue;
 ...
-	}
+    }
 out:
 ...
-	return ret;
+    return ret;
 }
 ```
 [`⬀ go to source code`](https://elixir.bootlin.com/linux/v5.17.9/source/fs/pipe.c#L416)
@@ -818,75 +818,75 @@ The case where a process asks the kernel to `read()` from a pipe is handled by t
 static ssize_t
 pipe_read(struct kiocb *iocb, struct iov_iter *to)
 {
-	size_t total_len = iov_iter_count(to);
-	struct file *filp = iocb->ki_filp;
-	struct pipe_inode_info *pipe = filp->private_data;
-	bool was_full, wake_next_reader = false;
-	ssize_t ret;
+    size_t total_len = iov_iter_count(to);
+    struct file *filp = iocb->ki_filp;
+    struct pipe_inode_info *pipe = filp->private_data;
+    bool was_full, wake_next_reader = false;
+    ssize_t ret;
 ...
-	ret = 0;
-	__pipe_lock(pipe);
+    ret = 0;
+    __pipe_lock(pipe);
 
-	/*
-	 * We only wake up writers if the pipe was full when we started
-	 * reading in order to avoid unnecessary wakeups.
-	 *
-	 * But when we do wake up writers, we do so using a sync wakeup
-	 * (WF_SYNC), because we want them to get going and generate more
-	 * data for us.
-	 */
-	was_full = pipe_full(pipe->head, pipe->tail, pipe->max_usage);
-	for (;;) {
-		/* Read ->head with a barrier vs post_one_notification() */
-		unsigned int head = smp_load_acquire(&pipe->head);
-		unsigned int tail = pipe->tail;
-		unsigned int mask = pipe->ring_size - 1;
+    /*
+     * We only wake up writers if the pipe was full when we started
+     * reading in order to avoid unnecessary wakeups.
+     *
+     * But when we do wake up writers, we do so using a sync wakeup
+     * (WF_SYNC), because we want them to get going and generate more
+     * data for us.
+     */
+    was_full = pipe_full(pipe->head, pipe->tail, pipe->max_usage);
+    for (;;) {
+        /* Read ->head with a barrier vs post_one_notification() */
+        unsigned int head = smp_load_acquire(&pipe->head);
+        unsigned int tail = pipe->tail;
+        unsigned int mask = pipe->ring_size - 1;
 ...
-		if (!pipe_empty(head, tail)) {
-			struct pipe_buffer *buf = &pipe->bufs[tail & mask];
-			size_t chars = buf->len;
-			size_t written;
-			int error;
+        if (!pipe_empty(head, tail)) {
+            struct pipe_buffer *buf = &pipe->bufs[tail & mask];
+            size_t chars = buf->len;
+            size_t written;
+            int error;
 
-			if (chars > total_len) {
+            if (chars > total_len) {
 ...
-				chars = total_len;
-			}
+                chars = total_len;
+            }
 ...
-			written = copy_page_to_iter(buf->page, buf->offset, chars, to);
+            written = copy_page_to_iter(buf->page, buf->offset, chars, to);
 ...
-			ret += chars;
-			buf->offset += chars;
-			buf->len -= chars;
+            ret += chars;
+            buf->offset += chars;
+            buf->len -= chars;
 ...
-			if (!buf->len) {
-				pipe_buf_release(pipe, buf);
+            if (!buf->len) {
+                pipe_buf_release(pipe, buf);
 ...
-				tail++;
-				pipe->tail = tail;
+                tail++;
+                pipe->tail = tail;
 ...
-			}
-			total_len -= chars;
-			if (!total_len)
-				break;	/* common path: read succeeded */
-			if (!pipe_empty(head, tail))	/* More to do? */
-				continue;
-		}
+            }
+            total_len -= chars;
+            if (!total_len)
+                break;    /* common path: read succeeded */
+            if (!pipe_empty(head, tail))    /* More to do? */
+                continue;
+        }
 
-		if (!pipe->writers)
-			break;
-		if (ret)
-			break;
-		if (filp->f_flags & O_NONBLOCK) {
-			ret = -EAGAIN;
-			break;
-		}
-		...
-	}
+        if (!pipe->writers)
+            break;
+        if (ret)
+            break;
+        if (filp->f_flags & O_NONBLOCK) {
+            ret = -EAGAIN;
+            break;
+        }
+        ...
+    }
 ...
-	if (ret > 0)
-		file_accessed(filp);
-	return ret;
+    if (ret > 0)
+        file_accessed(filp);
+    return ret;
 }
 ```
 [`⬀ go to source code`](https://elixir.bootlin.com/linux/v5.17.9/source/fs/pipe.c#L231)
@@ -895,43 +895,43 @@ If the pipe is non-empty, the data is taken from the `tail`-indexed `pipe_buffer
 
 ```c
 static const struct pipe_buf_operations anon_pipe_buf_ops = {
-	.release	= anon_pipe_buf_release,
-	.try_steal	= anon_pipe_buf_try_steal,
-	.get		= generic_pipe_buf_get,
+    .release   = anon_pipe_buf_release,
+    .try_steal = anon_pipe_buf_try_steal,
+    .get       = generic_pipe_buf_get,
 };
 ```
 [`⬀ go to source code`](https://elixir.bootlin.com/linux/v5.17.9/source/fs/pipe.c#L214)
 ```c
 /**
  * pipe_buf_release - put a reference to a pipe_buffer
- * @pipe:	the pipe that the buffer belongs to
- * @buf:	the buffer to put a reference to
+ * @pipe:    the pipe that the buffer belongs to
+ * @buf:    the buffer to put a reference to
  */
 static inline void pipe_buf_release(struct pipe_inode_info *pipe,
-				    struct pipe_buffer *buf)
+                    struct pipe_buffer *buf)
 {
-	const struct pipe_buf_operations *ops = buf->ops;
+    const struct pipe_buf_operations *ops = buf->ops;
 
-	buf->ops = NULL;
-	ops->release(pipe, buf);
+    buf->ops = NULL;
+    ops->release(pipe, buf);
 }
 ```
 [`⬀ go to source code`](https://elixir.bootlin.com/linux/v5.17.9/source/include/linux/pipe_fs_i.h#L197)
 ```c
 static void anon_pipe_buf_release(struct pipe_inode_info *pipe,
-				  struct pipe_buffer *buf)
+                  struct pipe_buffer *buf)
 {
-	struct page *page = buf->page;
+    struct page *page = buf->page;
 
-	/*
-	 * If nobody else uses this page, and we don't already have a
-	 * temporary page, let's keep track of it as a one-deep
-	 * allocation cache. (Otherwise just release our reference to it)
-	 */
-	if (page_count(page) == 1 && !pipe->tmp_page)
-		pipe->tmp_page = page;
-	else
-		put_page(page);
+    /*
+     * If nobody else uses this page, and we don't already have a
+     * temporary page, let's keep track of it as a one-deep
+     * allocation cache. (Otherwise just release our reference to it)
+     */
+    if (page_count(page) == 1 && !pipe->tmp_page)
+        pipe->tmp_page = page;
+    else
+        put_page(page);
 }
 ```
 [`⬀ go to source code`](https://elixir.bootlin.com/linux/v5.17.9/source/fs/pipe.c#L125)
@@ -1022,8 +1022,8 @@ To see that this figure is correct, we start from the system call's entry point 
 
 ```c
 static long do_splice_to(struct file *in, loff_t *ppos,
-			 struct pipe_inode_info *pipe, size_t len,
-			 unsigned int flags);
+             struct pipe_inode_info *pipe, size_t len,
+             unsigned int flags);
 ```
 
 is called, which executes
@@ -1039,9 +1039,9 @@ From here on, the execution path depends on the type of file we want to splice t
 ```c
 const struct file_operations ext2_file_operations = {
 ...
-	.read_iter	= ext2_file_read_iter,
+    .read_iter      = ext2_file_read_iter,
 ...
-	.splice_read	= generic_file_splice_read,
+    .splice_read    = generic_file_splice_read,
 ...
 };
 ```
@@ -1065,38 +1065,38 @@ Calling `generic_file_splice_read()` (eventually...) leads us to `filemap_read()
  * a negative error number.
  */
 ssize_t filemap_read(struct kiocb *iocb, struct iov_iter *iter,
-		ssize_t already_read)
+        ssize_t already_read)
 {
-	struct file *filp = iocb->ki_filp;
-	struct file_ra_state *ra = &filp->f_ra;
-	struct address_space *mapping = filp->f_mapping;
-	struct inode *inode = mapping->host;
-	struct folio_batch fbatch;
+    struct file *filp = iocb->ki_filp;
+    struct file_ra_state *ra = &filp->f_ra;
+    struct address_space *mapping = filp->f_mapping;
+    struct inode *inode = mapping->host;
+    struct folio_batch fbatch;
 ...
         folio_batch_init(&fbatch);
 ...
     do {
 ...
-		error = filemap_get_pages(iocb, iter, &fbatch);
+        error = filemap_get_pages(iocb, iter, &fbatch);
 ...
-		for (i = 0; i < folio_batch_count(&fbatch); i++) {
-			struct folio *folio = fbatch.folios[i];
-			size_t fsize = folio_size(folio);
-			size_t offset = iocb->ki_pos & (fsize - 1);
-			size_t bytes = min_t(loff_t, end_offset - iocb->ki_pos,
-					     fsize - offset);
-			size_t copied;
+        for (i = 0; i < folio_batch_count(&fbatch); i++) {
+            struct folio *folio = fbatch.folios[i];
+            size_t fsize = folio_size(folio);
+            size_t offset = iocb->ki_pos & (fsize - 1);
+            size_t bytes = min_t(loff_t, end_offset - iocb->ki_pos,
+                         fsize - offset);
+            size_t copied;
 ...
-			copied = copy_folio_to_iter(folio, offset, bytes, iter);
+            copied = copy_folio_to_iter(folio, offset, bytes, iter);
             
-			already_read += copied;
-			iocb->ki_pos += copied;
-			ra->prev_pos = iocb->ki_pos;
+            already_read += copied;
+            iocb->ki_pos += copied;
+            ra->prev_pos = iocb->ki_pos;
 ...
-		}
+        }
 ...
-		folio_batch_init(&fbatch);
-	} while (iov_iter_count(iter) && iocb->ki_pos < isize && !error);
+        folio_batch_init(&fbatch);
+    } while (iov_iter_count(iter) && iocb->ki_pos < isize && !error);
 ...
 ```
 [`⬀ go to source code`](https://elixir.bootlin.com/linux/v5.17.9/source/mm/filemap.c#L2645)
@@ -1111,7 +1111,7 @@ Besides, however, that if we look closer at the  implementation of this operatio
 
 ```c
 static size_t copy_page_to_iter_pipe(struct page *page, size_t offset, size_t bytes,
-			 struct iov_iter *i)
+             struct iov_iter *i)
 {
 ...
 struct pipe_inode_info *pipe = i->pipe;
@@ -1123,22 +1123,22 @@ size_t off;
 off = i->iov_offset;
 buf = &pipe->bufs[i_head & p_mask];
 if (off) {
-	if (offset == off && buf->page == page) {
-	    /* merge with the last one */
-		buf->len += bytes;
-		i->iov_offset += bytes;
-		goto out;
-	}
-	i_head++;
-	buf = &pipe->bufs[i_head & p_mask];
+    if (offset == off && buf->page == page) {
+        /* merge with the last one */
+        buf->len += bytes;
+        i->iov_offset += bytes;
+        goto out;
+    }
+    i_head++;
+    buf = &pipe->bufs[i_head & p_mask];
 }
 ...
-	buf->ops = &page_cache_pipe_buf_ops;
+    buf->ops = &page_cache_pipe_buf_ops;
 
-	get_page(page);
-	buf->page = page;
-	buf->offset = offset;
-	buf->len = bytes;
+    get_page(page);
+    buf->page = page;
+    buf->offset = offset;
+    buf->len = bytes;
 ...
 ```
 [`⬀ go to source code`](https://elixir.bootlin.com/linux/v5.17.9/source/lib/iov_iter.c#L382)
@@ -1288,21 +1288,21 @@ Given a PoC and a patch there are different approaches to investigate the vulner
    --- a/lib/iov_iter.c
    +++ b/lib/iov_iter.c
    @@ -414,6 +414,7 @@ static size_t copy_page_to_iter_pipe(struct page *page, size_t offset, size_t by
-    		return 0;
+            return 0;
     
-    	buf->ops = &page_cache_pipe_buf_ops;
-   +	buf->flags = 0;
-    	get_page(page);
-    	buf->page = page;
-    	buf->offset = offset;
+        buf->ops = &page_cache_pipe_buf_ops;
+   +    buf->flags = 0;
+        get_page(page);
+        buf->page = page;
+        buf->offset = offset;
    @@ -577,6 +578,7 @@ static size_t push_pipe(struct iov_iter *i, size_t size,
-    			break;
+                break;
     
-    		buf->ops = &default_pipe_buf_ops;
-   +		buf->flags = 0;
-    		buf->page = page;
-    		buf->offset = 0;
-    		buf->len = min_t(ssize_t, left, PAGE_SIZE);
+            buf->ops = &default_pipe_buf_ops;
+   +        buf->flags = 0;
+            buf->page = page;
+            buf->offset = 0;
+            buf->len = min_t(ssize_t, left, PAGE_SIZE);
    ```
 
    - find `lib/iov_iter.c` (more concrete the functions `copy_page_to_iter_pipe()` and `push_pipe()`) and your way back to the system calls.
