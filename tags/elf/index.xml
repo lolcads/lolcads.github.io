@@ -1,0 +1,520 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>ELF on lolcads tech blog</title><link>https://lolcads.github.io/tags/elf/</link><description>Recent content in ELF on lolcads tech blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><copyright>&amp;copy; lolcads</copyright><lastBuildDate>Thu, 28 Jul 2022 13:29:30 +0200</lastBuildDate><atom:link href="https://lolcads.github.io/tags/elf/index.xml" rel="self" type="application/rss+xml"/><item><title>Make Frida Great Again</title><link>https://lolcads.github.io/posts/2022/07/make_frida_great_again/</link><pubDate>Thu, 28 Jul 2022 13:29:30 +0200</pubDate><guid>https://lolcads.github.io/posts/2022/07/make_frida_great_again/</guid><description>Make Frida Great Again In order to analyse binaries on e.g. Android systems, one is offered a plethora of tools to use to figure out what a binary is doing, whether it is malicious or just buggy. One way to figure out the behaviour of a binary is to utilise the strength of dynamic analysis. Under linux, i.e. Android in particular, Frida is a tool that is used for automated instrumentation of binaries, to inspect memory, function calls etc.</description><content>&lt;h1 id="make-frida-great-again">Make Frida Great Again&lt;/h1>
+&lt;p>In order to analyse binaries on e.g. Android systems, one is offered a plethora of tools to use to figure out what a binary is doing, whether it is malicious or just buggy. One way to figure out the behaviour of a binary is to utilise the strength of dynamic analysis. Under linux, i.e. Android in particular, &lt;a href="https://frida.re">Frida&lt;/a> is a tool that is used for automated instrumentation of binaries, to inspect memory, function calls etc.&lt;/p>
+&lt;p>In this blog post, I will describe how to overcome a main issue of Frida such that Frida is applicable to a broader set of binaries. For that I will give in-depth explanations on the different techniques being used to solve the issue. Also I will showcase the use of a &lt;a href="https://github.com/fkie-cad/ELFbin">python library&lt;/a> that emerged as a result of this issue.&lt;/p>
+&lt;h2 id="stumbling-frida---the-issue">Stumbling Frida - The Issue&lt;/h2>
+&lt;p>Frida internally uses the &lt;a href="https://man7.org/linux/man-pages/man2/ptrace.2.html">&lt;code>ptrace&lt;/code>&lt;/a> - syscall to attach to running processes. Notice that using &lt;code>ptrace&lt;/code> requires the &lt;code>CAP_SYS_PTRACE&lt;/code> - capability, which is a requirement for tracing arbitrary processes. Thus, an unprivileged user cannot trace e.g. a privileged process. An example is tracing a process on an Android device. If this device is not rooted, then it will not be possible to use &lt;code>ptrace&lt;/code> on arbitrary processes.&lt;/p>
+&lt;p>Lets assume that a user is capable of using &lt;code>ptrace&lt;/code> and that user wants to analyse a potentially malicious binary that employs anti-debugging techniques like the following one&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C" data-lang="C">&lt;span style="color:#66d9ef">if&lt;/span> (ptrace(PTRACE_TRACEME, &lt;span style="color:#ae81ff">0&lt;/span>, &lt;span style="color:#ae81ff">0&lt;/span>, &lt;span style="color:#ae81ff">0&lt;/span>) &lt;span style="color:#f92672">==&lt;/span> &lt;span style="color:#f92672">-&lt;/span>&lt;span style="color:#ae81ff">1&lt;/span>) {
+&lt;span style="color:#75715e">// traced: nice behaviour
+&lt;/span>&lt;span style="color:#75715e">&lt;/span>} &lt;span style="color:#66d9ef">else&lt;/span> {
+&lt;span style="color:#75715e">// not traced: evil behaviour
+&lt;/span>&lt;span style="color:#75715e">&lt;/span>}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Then Frida can again not be used to analyse all functionality of the process. This is due to the fact that for each tracee there may at most be one tracer.&lt;/p>
+&lt;h2 id="frida-gadget">Frida Gadget&lt;/h2>
+&lt;p>Of course the developers of Frida are well aware of this issue. Therefore they provide a shared object file called &lt;a href="https://frida.re/docs/gadget/">&lt;em>frida-gadget.so&lt;/em>&lt;/a>(downloaded &lt;a href="https://github.com/frida/frida/releases">here&lt;/a>), which is to be injected manually into the target process. There are different kinds of interaction types that specify how the connection between the &lt;em>frida server&lt;/em> and the &lt;em>frida client&lt;/em> is set up.&lt;/p>
+&lt;p>In the following you can see an example of how to use &lt;em>frida-gadget.so&lt;/em> with its default interaction type &lt;em>listen&lt;/em>. First, for the target binary:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">LD_PRELOAD&lt;span style="color:#f92672">=&lt;/span>/path/to/frida-gadget.so /path/to/target
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Now, in order to e.g. trace syscalls that start with &amp;ldquo;read&amp;rdquo;:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">frida-trace -H 127.0.0.1:27042 -n &lt;span style="color:#e6db74">&amp;#34;Gadget&amp;#34;&lt;/span> -i &lt;span style="color:#e6db74">&amp;#34;read*&amp;#34;&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;ul>
+&lt;li>-H 127.0.0.1:27042: Specifies the frida server to connect to. In this case the server is located on localhost on the default port 27042.&lt;/li>
+&lt;li>-n &amp;ldquo;Gadget&amp;rdquo;: Name of the process to attach to. &lt;strong>In this setting, the name of the target process will always be &amp;ldquo;Gadget&amp;rdquo;!&lt;/strong>&lt;/li>
+&lt;li>-i &amp;ldquo;read*&amp;quot;: Specifies what function(s) to trace.&lt;/li>
+&lt;/ul>
+&lt;p>Using &lt;code>LD_PRELOAD&lt;/code> is not practical in all cases as e.g. it cannot be used to instrument an SUID - binary. For a more general solution, we need another approach.&lt;/p>
+&lt;h2 id="elf---based-injection">ELF - based Injection&lt;/h2>
+&lt;p>The approach used to make a process load &lt;em>frida-gadget.so&lt;/em> at startup is ELF - based injection. In order to support as many platforms as possible, those injection techniques will be based on &lt;a href="http://www.sco.com/developers/gabi/latest/contents.html">System V gABI&lt;/a>. It describes the abstract structure of an ELF - file, occasionally leaving out details to be specified by a corresponding &lt;em>Processor Supplement&lt;/em> (e.g. &lt;a href="https://github.com/ARM-software/abi-aa/releases/download/2022Q1/aaelf64.pdf">ARM64&lt;/a> or &lt;a href="https://gitlab.com/x86-psABIs/x86-64-ABI">AMD64&lt;/a>).&lt;/p>
+&lt;p>Unfortunately, it is &lt;strong>not&lt;/strong> possible to fully implement ELF - based injection without using architecture - or OS - dependent information. Thus, the following platform-specific assumptions were made when designing the techniques:&lt;/p>
+&lt;ol>
+&lt;li>ELF - binary is run on ARM64 and Android: This must currently be ensured, because adjusting virtual addresses and file offsets in the binary enforces patching &lt;a href="http://www.sco.com/developers/gabi/latest/ch4.reloc.html">&lt;em>Relocation Tables&lt;/em>&lt;/a>, which are highly platform - dependent.&lt;/li>
+&lt;li>There are no other platform - specific tags for &lt;em>.dynamic&lt;/em> - entries other than&lt;/li>
+&lt;li>DT_VERSYM&lt;/li>
+&lt;li>DT_VERDEF&lt;/li>
+&lt;li>DT_VERNEED&lt;/li>
+&lt;li>One of the parsers (see &lt;a href="#rule-of-two">Rule of Two&lt;/a>) is build for AMD64 only. Thus the python library will only work on AMD64. Technically, one can try to make sense of the makefiles and change the compilation such that it supports other architectures aswell.&lt;/li>
+&lt;/ol>
+&lt;p>ELF - based injection can be split into two (or more) steps:&lt;/p>
+&lt;ol>
+&lt;li>Code injection: Insert code into binary, i.e. make it available for internal structures.&lt;/li>
+&lt;li>Code execution: Make injected code executable, i.e. manipulate structures like entry point such that the injected code will be part of the control flow.&lt;/li>
+&lt;/ol>
+&lt;p>There is one special technique that cannot be split into two parts: &lt;em>.dynamic&lt;/em> - based injection.&lt;/p>
+&lt;h3 id="rule-of-two">Rule of Two&lt;/h3>
+&lt;p>The techniques to be explained are implemented in a &lt;a href="https://github.com/fkie-cad/ELFbin">python library&lt;/a>, which mainly uses &lt;a href="https://github.com/lief-project/LIEF">LIEF&lt;/a>. LIEF is a binary parser that among other things supports parsing and manipulating ELF - files. However there is a problem with LIEF, i.e. LIEF desperately tries to keep the binary intact. For that LIEF inserts new memory, shuffles segments around and maybe more when just opening and closing the binary. E.g.&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-python" data-lang="python">binary &lt;span style="color:#f92672">=&lt;/span> lief&lt;span style="color:#f92672">.&lt;/span>parse(&lt;span style="color:#e6db74">&amp;#39;/bin/ls&amp;#39;&lt;/span>)
+binary&lt;span style="color:#f92672">.&lt;/span>write(&lt;span style="color:#e6db74">&amp;#39;./tmp&amp;#39;&lt;/span>)
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>will &amp;ldquo;build&amp;rdquo; the binary, i.e. internally calling&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-python" data-lang="python">builder &lt;span style="color:#f92672">=&lt;/span> lief&lt;span style="color:#f92672">.&lt;/span>ELF&lt;span style="color:#f92672">.&lt;/span>Builder(binary)
+builder&lt;span style="color:#f92672">.&lt;/span>build()
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>which will insert memory (out of nowhere). One could make the hypothesis that LIEF wants to &amp;ldquo;prepare&amp;rdquo; the binary for future manipulation and thus already allocates enough space to support e.g. quick PHT injections.&lt;/p>
+&lt;p>Also LIEF does not provide all necessary functionality to implement the techniques described in this post. E.g. LIEF does not support overwriting a PHT - entry without modifying the linked memory.&lt;/p>
+&lt;p>To that end, a custom parser is utilised. It supports all necessary functionality that LIEF is lacking or not willing to provide, because it might break correctness. The custom parser, &lt;code>rawelf_injection&lt;/code>, takes the name of a binary as an input and performs the requested operations.&lt;/p>
+&lt;p>An issue is that when calling &lt;code>rawelf_injection&lt;/code>, LIEF needs to store the current state of the binary to a temporary file and reparse that file after &lt;code>rawelf_injection&lt;/code> is done. This will result in references to objects, that are related to the state of a LIEF - binary &lt;strong>before&lt;/strong> storing the binary to a file, being invalid after LIEF reparsed the binary.&lt;/p>
+&lt;p>Other problems emerging from using two parsers at the same time will be mentioned throughout the following sections.&lt;/p>
+&lt;h3 id="code-injection">Code Injection&lt;/h3>
+&lt;p>Inserting code into the binary can be as easy as just overwriting existing code in &lt;em>.text&lt;/em> and as hard as inserting a new segment and a corresponding PHT - entry. Interestingly, not all of the following techniques are applicable in a fixed setting, thus the user of &lt;code>ElfInjection&lt;/code> has to know what he/she is doing when performing code injection.&lt;/p>
+&lt;p>As &lt;code>rawelf_injection&lt;/code> has been designed w.r.t. the System V gABI, applying it to ELF - files constructed for Android on AARCH64 was assumed to work just out-of-the-box (except for relocations). &lt;code>rawelf_injection&lt;/code> has only been tested on Ubuntu 20.04 LTS on AMD64 up to the date I started applying the techniques to ELF - files run on an Android emulator. Lets first look at an overview of the challenges I experienced before diving into the details:&lt;/p>
+&lt;p>&lt;img src="https://lolcads.github.io/2022/07/arm_vs_amd.png" alt="Challenges introduced by new platform">&lt;/p>
+&lt;p>Unfortunately, it turns out that &lt;code>rawelf_injection&lt;/code> does not support platform - independent injection techniques, as OS vendors apparently are allowed to deviate partially from the System V gABI. On the other hand, for different architectures, there are different CPU instructions, like e.g. &lt;code>adrp&lt;/code>, that introduce unwanted side effects when inserting new memory.&lt;/p>
+&lt;p>So lets list the challenges and then try to solve them:&lt;/p>
+&lt;ol>
+&lt;li>Inserting new memory into a binary can invalidate cross - references (e.g. &lt;code>adrp&lt;/code>).&lt;/li>
+&lt;li>Loadable segments should not overlap (see &lt;a href="https://cs.android.com/android/platform/superproject/+/master:bionic/linker/linker_phdr.cpp;l=80">linker_phdr.cpp&lt;/a> ; user has to ensure that loadables do not overlap)&lt;/li>
+&lt;li>Platform - specific ELF patches (adjust &lt;code>rawelf_injection&lt;/code> to AARCH64 processor supplement)&lt;/li>
+&lt;li>Dynamic linker (see &lt;a href="#dynsym---based-injection">.dynsym - based injection&lt;/a> for details)&lt;/li>
+&lt;/ol>
+&lt;h4 id="problem-with-adrp">Problem with &lt;code>adrp&lt;/code>&lt;/h4>
+&lt;p>Lets assume we want to inject code into an ARM64 - PIE on Android (API level 31, Pixel 3). Then, using NDK r23b&amp;rsquo;s toolchain (i.e. &lt;code>ndk-build&lt;/code>) to compile the program&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C" data-lang="C">&lt;span style="color:#75715e">#include&lt;/span> &lt;span style="color:#75715e">&amp;lt;stdio.h&amp;gt;&lt;/span>&lt;span style="color:#75715e">
+&lt;/span>&lt;span style="color:#75715e">&lt;/span>&lt;span style="color:#960050;background-color:#1e0010">ì&lt;/span>nt &lt;span style="color:#a6e22e">main&lt;/span>() {
+puts(&lt;span style="color:#e6db74">&amp;#34;Hello World!&lt;/span>&lt;span style="color:#ae81ff">\n&lt;/span>&lt;span style="color:#e6db74">&amp;#34;&lt;/span>);
+&lt;span style="color:#66d9ef">return&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>;
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>there will be at least one &lt;em>.plt&lt;/em> - entry that handles all calls to &lt;code>puts&lt;/code>. The corresponding &lt;em>.plt&lt;/em> - stub may look like this:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">$ aarch64-linux-gnu-objdump -j .plt -d hello
+...
+00000000000006a0 &amp;lt;__libc_init@plt-0x20&amp;gt;:
+6a0: a9bf7bf0 stp x16, x30, &lt;span style="color:#f92672">[&lt;/span>sp, &lt;span style="color:#75715e">#-16]!&lt;/span>
+6a4: b0000010 adrp x16, &lt;span style="color:#ae81ff">1000&lt;/span> &amp;lt;puts@plt+0x920&amp;gt;
+6a8: f944a211 ldr x17, &lt;span style="color:#f92672">[&lt;/span>x16, &lt;span style="color:#75715e">#2368]&lt;/span>
+6ac: &lt;span style="color:#ae81ff">91250210&lt;/span> add x16, x16, &lt;span style="color:#75715e">#0x940&lt;/span>
+6b0: d61f0220 br x17
+...
+00000000000006e0 &amp;lt;puts@plt&amp;gt;:
+6e0: b0000010 adrp x16, &lt;span style="color:#ae81ff">1000&lt;/span> &amp;lt;puts@plt+0x920&amp;gt;
+6e4: f944ae11 ldr x17, &lt;span style="color:#f92672">[&lt;/span>x16, &lt;span style="color:#75715e">#2392]&lt;/span>
+6e8: &lt;span style="color:#ae81ff">91256210&lt;/span> add x16, x16, &lt;span style="color:#75715e">#0x958&lt;/span>
+6ec: d61f0220 br x17
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Notice that &lt;code>adrp&lt;/code> will first compute &lt;code>0x6e0 + 0x1000&lt;/code> and then zero out the least-significant 12 bits (related to page size). Thus &lt;code>x16&lt;/code> will contain &lt;code>0x1000&lt;/code>. Then &lt;code>x17&lt;/code> will contain the value located at address &lt;code>0x1000 + 0x958&lt;/code> (i.e. &lt;code>0x958 = 2392&lt;/code>), which is the second to last &lt;em>.got.plt&lt;/em> - entry, containing the address of the dynamic linker stub (see address &lt;code>0x6a0&lt;/code> in objdump - output):&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">$ readelf --wide --sections hello
+&lt;span style="color:#f92672">[&lt;/span>Nr&lt;span style="color:#f92672">]&lt;/span> Name Type Address Off Size ES Flg Lk Inf Al
+...
+&lt;span style="color:#f92672">[&lt;/span>22&lt;span style="color:#f92672">]&lt;/span> .got.plt PROGBITS &lt;span style="color:#ae81ff">0000000000001930&lt;/span> &lt;span style="color:#ae81ff">000930&lt;/span> &lt;span style="color:#ae81ff">000030&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> WA &lt;span style="color:#ae81ff">0&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span> &lt;span style="color:#ae81ff">8&lt;/span>
+...
+$ readelf --wide --hex-dump&lt;span style="color:#f92672">=&lt;/span>&lt;span style="color:#ae81ff">22&lt;/span> hello
+...
+0x00001950 a0060000 &lt;span style="color:#ae81ff">00000000&lt;/span> a0060000 &lt;span style="color:#ae81ff">00000000&lt;/span> ................
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Inserting data into the binary can now result in broken references. Lets consider the example that we want to append a new PHT - entry to PHT. Assuming the above platform and build, the PHT is located at&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">$ readelf --wide --segments hello
+Type Offset VirtAddr PhysAddr FileSiz MemSiz Flg Align
+...
+PHDR 0x000040 0x0000000000000040 0x0000000000000040 0x000230 0x000230 R 0x8
+...
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Appending the PHT - entry will increase the &lt;code>PHDR&lt;/code>&amp;rsquo;s size by &lt;code>0x38&lt;/code>, which again will shift everything located after the PHT by &lt;code>0x38&lt;/code> to the back. Lets consider &lt;em>.plt&lt;/em> again&lt;/p>
+&lt;pre tabindex="0">&lt;code>00000000000006e0 &amp;lt;puts@plt&amp;gt;:
+6e0 + 0x38: b0000010 adrp x16, 1000 --&amp;gt; x16 = 0x1000
+6e4 + 0x38: f944ae11 ldr x17, [x16, #2392] --&amp;gt; x17 = 0x1000 + 0x958 = 0x1958
+6e8 + 0x38: 91256210 add x16, x16, #0x958 --&amp;gt; x16 = 0x1958
+6ec + 0x38: d61f0220 br x17
+&lt;/code>&lt;/pre>&lt;p>So we will still jump to the same &lt;em>.plt&lt;/em> - stub we would jump to, if we did not insert the PHT - entry. In (almost) all cases, this will give you &lt;code>SIGSEG&lt;/code> or &lt;code>SIGILL&lt;/code>. This is a problem to consider whenever new data is injected into a binary. Despite the fact that we have to take care of unpatchable references, there are also patchable references that can be changed automatically (i.e. using heuristics and math) like e.g. &lt;em>.dynamic&lt;/em> entries of tag &lt;code>DT_SYMTAB&lt;/code>.&lt;/p>
+&lt;p>In addition to that, if we assumed that we inserted a loadable segment, i.e. a PHT - entry of type &lt;code>PT_LOAD&lt;/code>, then the binary might crash with high probability (for me it crashed on every test). Regarding the &lt;a href="https://cs.android.com/android/kernel/superproject/+/common-android-mainline:common/fs/binfmt_elf.c;l=1147">kernel&lt;/a>, loadable segments are allowed to overlap, which coincides with &lt;a href="http://www.sco.com/developers/gabi/latest/ch5.pheader.html">System V gABI&lt;/a> (notice the absense of any constraints for segments in comparison to the constraints enforced for &lt;a href="http://www.sco.com/developers/gabi/latest/ch4.sheader.html">sections&lt;/a>). This may lead to the conclusion that either inserting an overlapping loadable segment introduces the same errors regarding &lt;code>adrp&lt;/code> as described above, or the dynamic linker contains code that sends a &lt;code>SIGSEG&lt;/code> or &lt;code>SIGILL&lt;/code> based on a certain condition. As all of the techniques are tested on an Android emulator with the above platform specifications, it could also be that the translator does not like overlapping loadables (&lt;code>/system/bin/ndk_translation_program_runner_binfmt_misc_arm64&lt;/code> is definitely capable of triggering &lt;code>SIGILL&lt;/code>!).&lt;/p>
+&lt;h4 id="code-cave---based-injection">Code Cave - based Injection&lt;/h4>
+&lt;p>The first technique described is code injection that relies on finding unused memory between two loadable segments, i.e. segments of type &lt;code>PT_LOAD&lt;/code>. For this technique to work properly, we need to consider the following things:&lt;/p>
+&lt;ol>
+&lt;li>This is a segment - based approach, which means that code caves must lie &lt;strong>between&lt;/strong> two loadable segments. Thus a code cave cannot be part of the process image.&lt;/li>
+&lt;li>Assuming we found a code cave, in order to put it into the process image we need to either create a new or overwrite an existing PHT - entry such that it points to the code cave. Or we need to expand one of the surrounding loadable segments. The latter is hard, because loadable segments may theoretically contain other loadable segments. Therefore only &amp;ldquo;top - level&amp;rdquo; loadable segments are used to search for code caves.&lt;/li>
+&lt;li>Segment - based code caves need to be searched for with respect to the file offsets and file sizes of the &amp;ldquo;top - level&amp;rdquo; loadable segments, because the code injection takes place in the file on disk, not at runtime. Again there is a problem, because the size of a segment on disk &lt;code>p_filesz&lt;/code> may be strictly less than the size in the process image &lt;code>p_memsz&lt;/code>. Appending a code cave to a loadable segment with &lt;code>p_filesz &amp;lt; p_memsz&lt;/code> may result in the injected code being overwritten by the application. Also, if combined with a PHT - based injection, one can set the virtual address and memory size to another code cave in process image.&lt;/li>
+&lt;li>&lt;a href="http://www.sco.com/developers/gabi/latest/ch5.pheader.html">System V gABI&lt;/a> states that PHT - entries of loadable segments must be sorted ascendingly wrt. their virtual addresses. Therefore the combination of a code cave with overwriting/creating PHT - entries is further limited to the order of PHT - entries. In practice it seems that we can derive from the &lt;a href="https://cs.android.com/android/kernel/superproject/+/common-android-mainline:common/fs/binfmt_elf.c;l=1138">kernel code&lt;/a> that only the first loadable segment needs to have the smallest virtual address s.t. &lt;code>load_bias&lt;/code> is correctly set (see also the &lt;a href="https://cs.android.com/android/platform/superproject/+/master:bionic/linker/linker_main.cpp;l=544">dynamic linker code&lt;/a> responsible for calculating the &lt;code>load_bias&lt;/code> for ELF - files loaded by the kernel). There seem to be no checks regarding the order of loadable segments as regards their virtual addresses.&lt;/li>
+&lt;/ol>
+&lt;p>Notice that inserting a PHT - entry to point to the code cave will cause all the problems described in &lt;a href="#code-injection">Code Injection&lt;/a>.&lt;/p>
+&lt;p>Injecting code into segment - based code caves is a simple and often stable way to get a binary to execute custom code. Of course seeking code caves can among other things involve analysing control flow to detect &amp;ldquo;dead&amp;rdquo; code in e.g. &lt;em>.text&lt;/em> that can be overwritten.&lt;/p>
+&lt;p>The following figure illustrates overwriting an existing PHT - entry such that it points to a segment - based code cave.
+&lt;img src="https://lolcads.github.io/2022/07/injection_segment_override_code_cave.png" alt="Overwrite PHT - entry plus code cave">&lt;/p>
+&lt;h4 id="segment---based-injection">Segment - based Injection&lt;/h4>
+&lt;p>This technique involves everything related to segments that is not already part of &lt;a href="#code-cave---based-injection">code cave - based injection&lt;/a>. To be precise, the following subtechniques can be formed:&lt;/p>
+&lt;ol>
+&lt;li>Overwrite an existing PHT - entry and overwrite an existing memory region. This is an abstraction of overwriting an existing PHT - entry such that it points to a segment - based code cave. Of course the PHT - entry should point to the overwritten memory, which can be a segment that is not part of the process image or something else.&lt;/li>
+&lt;li>Overwrite an existing PHT - entry and insert new memory to be interpreted as a segment. Inserting new memory will result in problems related to cross - references described in &lt;a href="#code-injection">Code Injection&lt;/a>. Also this will result in a &amp;ldquo;dead&amp;rdquo; memory region, because the memory region the overwritten PHT - entry was referencing is not interpreted as a segment anymore.&lt;/li>
+&lt;li>Insert a new PHT - entry and overwrite an existing memory region. This is again an abstraction of a code cave - based injection technique, but now arbitrary memory can be interpreted as a segment (notice that the memory region we overwrite is not limited to memory regions between loadable segments as in &lt;a href="#code-cave---based-injection">Code - Cave - based Injection&lt;/a>). Although it can happen that two PHT - entries reference the same memory region. Again note that inserting a new PHT - entry may invalidate cross - references.&lt;/li>
+&lt;li>Finally one can insert a new PHT - entry and a new memory region. As long as one can manage validating cross - references, this technique is the least intrusive one and is even reversible.&lt;/li>
+&lt;/ol>
+&lt;p>The following figure depicts inserting a completely new segment:
+&lt;img src="https://lolcads.github.io/2022/07/injection_segment_inject_inject_memory.png" alt="Insert PHT - entry plus new memory">&lt;/p>
+&lt;p>Thinking back to &lt;a href="#rule-of-two">using two parsers&lt;/a>, we can see that the &amp;ldquo;mixed&amp;rdquo; techniques are problematic. To be precise, after calling &lt;code>rawelf_injection&lt;/code>, LIEF will cause a segmentation fault during its parsing phase. It might be related to the fact that both &amp;ldquo;mixed&amp;rdquo; techniques result in some form of &amp;ldquo;dead&amp;rdquo; memory, i.e. either a &amp;ldquo;dead&amp;rdquo; PHT - entry or a &amp;ldquo;dead&amp;rdquo; memory region. A solution is to avoid reparsing, i.e. call &lt;code>rawelf_injection&lt;/code> independently from LIEF.&lt;/p>
+&lt;h3 id="code-execution">Code Execution&lt;/h3>
+&lt;p>Making already injected code executable is key to seeing any signs of life of our code. Technically speaking, there is a plethora of ways to make code executable, but most of them are highly platform - dependent. Thus we try to focus on the most abstract methods to archive code execution.&lt;/p>
+&lt;p>LIEF fully supports all following approaches, which prevents compatibility issues between the two parsers.&lt;/p>
+&lt;h4 id="entry-point">Entry Point&lt;/h4>
+&lt;p>The most natural approach is to overwrite the entry point address &lt;code>e_entry&lt;/code> located in the ELF - header. However, it might be unclear what to write into &lt;code>e_entry&lt;/code> at the first glance. &lt;code>e_entry&lt;/code> is a &lt;strong>virtual address&lt;/strong> pointing to the first instruction executed after the OS/dynamic linker is done setting up the execution environment. As all code injection techniques discussed above work with &lt;strong>file offsets&lt;/strong>, there needs to be a translation from file offet to virtual address. Fortunately, LIEF provides us with a function that does exactly that&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-python" data-lang="python">vaddr &lt;span style="color:#f92672">=&lt;/span> binary&lt;span style="color:#f92672">.&lt;/span>offset_to_virtual_address(off)
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Theoretically the conversion can be done manually aswell. For that assume that the injected code is part of a loadable segment (of type &lt;code>Elf64_Phdr&lt;/code>). Then&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-python" data-lang="python">vaddr &lt;span style="color:#f92672">=&lt;/span> (off &lt;span style="color:#f92672">-&lt;/span> seg&lt;span style="color:#f92672">.&lt;/span>p_offset) &lt;span style="color:#f92672">+&lt;/span> seg&lt;span style="color:#f92672">.&lt;/span>p_vaddr
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Intuition behind that is that the relative offset of a structure to the beginning of the segment that contains the structure will remain the same, regardless of whether we are in the process image or in the file. Note that this conversion might &lt;strong>not work in general&lt;/strong>.&lt;/p>
+&lt;p>The following picture shows the general idea of this technique:
+&lt;img src="https://lolcads.github.io/2022/07/execution_override_entry.png" alt="Overwrite entry point">&lt;/p>
+&lt;h4 id="dynsym---based-injection">&lt;em>.dynsym&lt;/em> - based Injection&lt;/h4>
+&lt;p>Another idea to make code executable would be to define a symbol such that it points to the injected code. This technique is &lt;strong>dependent on the &lt;em>Dynamic Linker&lt;/em>&lt;/strong>, because the dynamic linker determines how a symbol is resolved at runtime. We would need the following assumptions:&lt;/p>
+&lt;ol>
+&lt;li>Dynamic Linker will not resolve a symbol, if there is already a non - zero definition in &lt;em>.dynsym&lt;/em>, and will use that existing definition.&lt;/li>
+&lt;li>Target binary uses &lt;em>Dynamic Linking&lt;/em>.&lt;/li>
+&lt;li>&lt;em>.dynamic&lt;/em> neither contains an entry with tag &lt;code>DT_BIND_NOW&lt;/code> nor any other platform - dependent entry that enforces non - lazy binding. Also there must not be an entry with tag &lt;code>DT_FLAGS&lt;/code> and value &lt;code>DF_BIND_NOW&lt;/code>. This is rather nice to have than necessary, because lazy binding allows for injected code to be executed before a symbol is resolved, thus leaving a time window, in which symbol resolution can be manipulated.&lt;/li>
+&lt;/ol>
+&lt;p>This time we are out of luck though. At least one of the above assumptions does not hold on our target platform and thus this technique is not applicable! If we were to manipulate relocations, we might be able to get a similar technique to work. Although it would not require &lt;em>.dynsym&lt;/em>.&lt;/p>
+&lt;h5 id="the-tradegy-of-lazy-binding">The Tradegy of Lazy Binding&lt;/h5>
+&lt;p>For this section we assume that we are looking at an Android OS (e.g. 12) on an ARM64 (i.e. AARCH64) architecture. For these platform specifications I want to explain that the dynamic linker &lt;strong>always&lt;/strong> uses &lt;code>BIND_NOW&lt;/code>, i.e. non - lazy binding!&lt;/p>
+&lt;p>Lets remember that, if we execute a binary (e.g. using &lt;code>execve&lt;/code>), the kernel will load the binary into memory. According to &lt;a href="https://cs.android.com/android/kernel/superproject/+/common-android-mainline:common/fs/exec.c;l=2082">AOSP&lt;/a>, we can derive the following call stack:&lt;/p>
+&lt;table>
+&lt;thead>
+&lt;tr>
+&lt;th>Order&lt;/th>
+&lt;th>Function Call&lt;/th>
+&lt;th>Line&lt;/th>
+&lt;/tr>
+&lt;/thead>
+&lt;tbody>
+&lt;tr>
+&lt;td>1.&lt;/td>
+&lt;td>&lt;code>syscall(execve, argv, envp)&lt;/code>&lt;/td>
+&lt;td>-&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>2.&lt;/td>
+&lt;td>&lt;code>do_execve(getname(filename), argv, envp)&lt;/code>&lt;/td>
+&lt;td>&lt;a href="https://cs.android.com/android/kernel/superproject/+/common-android-mainline:common/fs/exec.c;l=2087">line&lt;/a>&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>3.&lt;/td>
+&lt;td>&lt;code>do_execveat_common(AT_FDCWD, filename, argv, envp, 0)&lt;/code>&lt;/td>
+&lt;td>&lt;a href="https://cs.android.com/android/kernel/superproject/+/common-android-mainline:common/fs/exec.c;l=2011">line&lt;/a>&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>4.&lt;/td>
+&lt;td>&lt;code>bprm_execve(bprm, fd, filename, flags)&lt;/code>&lt;/td>
+&lt;td>&lt;a href="https://cs.android.com/android/kernel/superproject/+/common-android-mainline:common/fs/exec.c;l=1941">line&lt;/a>&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>5.&lt;/td>
+&lt;td>&lt;code>exec_binprm(bprm)&lt;/code>&lt;/td>
+&lt;td>&lt;a href="https://cs.android.com/android/kernel/superproject/+/common-android-mainline:common/fs/exec.c;l=1836">line&lt;/a>&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>6.&lt;/td>
+&lt;td>&lt;code>search_binary_handler(bprm)&lt;/code>&lt;/td>
+&lt;td>&lt;a href="https://cs.android.com/android/kernel/superproject/+/common-android-mainline:common/fs/exec.c;l=1767">line&lt;/a>&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>7.&lt;/td>
+&lt;td>&lt;code>fmt-&amp;gt;load_binary(bprm)&lt;/code>&lt;/td>
+&lt;td>&lt;a href="https://cs.android.com/android/kernel/superproject/+/common-android-mainline:common/fs/exec.c;l=1726">line&lt;/a>&lt;/td>
+&lt;/tr>
+&lt;/tbody>
+&lt;/table>
+&lt;p>In the file &lt;a href="https://cs.android.com/android/kernel/superproject/+/common-android-mainline:common/fs/binfmt_elf.c;l=100">&lt;code>common/fs/binfmt_elf.c&lt;/code>&lt;/a> we can find the corresponding binary format that is registering &lt;a href="https://cs.android.com/android/kernel/superproject/+/common-android-mainline:common/fs/binfmt_elf.c;l=824">&lt;code>load_elf_binary&lt;/code>&lt;/a> as the function that is called last in the call stack. Investigating that function leads us to the conclusion that the kernel may handle loading the binary. Also we can see that if the program to be executed uses an interpreter, i.e. there is a segment of type &lt;code>PT_INTERP&lt;/code>, then the kernel will &lt;a href="https://cs.android.com/android/kernel/superproject/+/common-android-mainline:common/fs/binfmt_elf.c;l=1260">set the entry point to the entry point of the interpreter&lt;/a> and &lt;a href="https://cs.android.com/android/kernel/superproject/+/common-android-mainline:common/fs/binfmt_elf.c;l=1348">start a thread at this entry point&lt;/a>.&lt;/p>
+&lt;p>This brings us to the dynamic linker, whose &amp;ldquo;nice&amp;rdquo; entry point is &lt;a href="https://cs.android.com/android/platform/superproject/+/master:bionic/linker/linker_main.cpp;l=311">&lt;code>linker_main&lt;/code>&lt;/a>. Of course we assume that we are looking at a binary that has at least one &lt;code>DT_NEEDED&lt;/code> - entry in &lt;em>.dynamic&lt;/em>. This will trigger a call to the function &lt;a href="https://cs.android.com/android/platform/superproject/+/master:bionic/linker/linker_main.cpp;l=483">&lt;code>find_libraries&lt;/code>&lt;/a>. This function tries to load all dynamic dependencies in a very complex way. Eventually it will call &lt;a href="https://cs.android.com/android/platform/superproject/+/master:bionic/linker/linker.cpp;l=1760;drc=beeaf36389bde1c5db8a676df575348f47e68594">&lt;code>soinfo::link_image&lt;/code>&lt;/a> with a lookup list containing descriptions of shared libraries to consider while linking:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C++" data-lang="C++">&lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#f92672">!&lt;/span>si&lt;span style="color:#f92672">-&amp;gt;&lt;/span>link_image(lookup_list, local_group_root, link_extinfo, &lt;span style="color:#f92672">&amp;amp;&lt;/span>relro_fd_offset) &lt;span style="color:#f92672">||&lt;/span>
+&lt;span style="color:#f92672">!&lt;/span>get_cfi_shadow()&lt;span style="color:#f92672">-&amp;gt;&lt;/span>AfterLoad(si, solist_get_head())) {
+&lt;span style="color:#66d9ef">return&lt;/span> false;
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Within &lt;code>soinfo::link_image&lt;/code>, there is a sneaky call to &lt;a href="https://cs.android.com/android/platform/superproject/+/master:bionic/linker/linker.cpp;l=3277">&lt;code>relocate&lt;/code>&lt;/a>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C++" data-lang="C++">&lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#f92672">!&lt;/span>relocate(lookup_list)) {
+&lt;span style="color:#66d9ef">return&lt;/span> false;
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>We know that the first &lt;em>.plt&lt;/em> - entry will lookup symbols, if the corresponding functions are called for the first time, in case of lazy binding. This means that we now expect corresponding relocations to take place s.t. &lt;em>.got.plt&lt;/em> (according to &lt;a href="https://maskray.me/blog/2021-08-29-all-about-global-offset-table">this&lt;/a>, &lt;em>.got.plt&lt;/em> holds symbol addresses used by &lt;em>.plt&lt;/em> - entries) eventually contains all function addresses before the program gets in control. Thus we will look for &lt;code>R_AARCH64_JUMP_SLOT&lt;/code> relocation types. Assuming the dynamic linker is compiled with &lt;code>USE_RELA&lt;/code>, it will &lt;a href="https://cs.android.com/android/platform/superproject/+/master:bionic/linker/linker_relocate.cpp;l=640">run&lt;/a>&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C++" data-lang="C++">&lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#f92672">!&lt;/span>plain_relocate&lt;span style="color:#f92672">&amp;lt;&lt;/span>RelocMode&lt;span style="color:#f92672">::&lt;/span>JumpTable&lt;span style="color:#f92672">&amp;gt;&lt;/span>(relocator, plt_rela_, plt_rela_count_)) {
+&lt;span style="color:#66d9ef">return&lt;/span> false;
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Following the one-liners we will wind up in &lt;a href="https://cs.android.com/android/platform/superproject/+/master:bionic/linker/linker_relocate.cpp;l=160">&lt;code>process_relocation_impl&lt;/code>&lt;/a>. As we are assuming that our relocation type of interest is &lt;code>R_AARCH64_JUMP_SLOT&lt;/code>, we get that its &lt;code>r_sym&lt;/code> refers to the corresponding &lt;em>.dynsym&lt;/em> - entry and is thus &lt;strong>not&lt;/strong> 0. This will result in an &lt;a href="https://cs.android.com/android/platform/superproject/+/master:bionic/linker/linker_relocate.cpp;l=280">&lt;code>r_sym == 0&lt;/code> - check&lt;/a> to be false, which triggers a symbol lookup in the corresponding &lt;code>else&lt;/code>:&lt;/p>
+&lt;pre tabindex="0">&lt;code>if (!lookup_symbol&amp;lt;IsGeneral&amp;gt;(relocator, r_sym, sym_name, &amp;amp;found_in, &amp;amp;sym)) return false;
+&lt;/code>&lt;/pre>&lt;p>(btw. the &lt;code>relocator&lt;/code> contains &lt;code>lookup_list&lt;/code>).&lt;/p>
+&lt;p>Again following the control flow will reveal a call to &lt;a href="https://cs.android.com/android/platform/superproject/+/master:bionic/linker/linker_relocate.cpp;l=108">&lt;code>soinfo_do_lookup&lt;/code>&lt;/a>:&lt;/p>
+&lt;pre tabindex="0">&lt;code>... soinfo_do_lookup(sym_name, vi, &amp;amp;local_found_in, relocator.lookup_list);
+&lt;/code>&lt;/pre>&lt;p>which, after following one - liners again, brings us to a function called &lt;a href="https://cs.android.com/android/platform/superproject/+/master:bionic/linker/linker_soinfo.cpp;l=119">&lt;code>soinfo_do_lookup_impl&lt;/code>&lt;/a>. This function will resolve a given symbol by name utilising the hash sections and symbol versioning. Eventually, it returns an instance of &lt;code>Elf64_Sym&lt;/code> that is forwarded all the way back to &lt;code>process_relocation_impl&lt;/code>. It will be used to compute the correct address of the symbol via&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C++" data-lang="C++">ElfW(Addr) resolve_symbol_address(&lt;span style="color:#66d9ef">const&lt;/span> ElfW(Sym)&lt;span style="color:#f92672">*&lt;/span> s) &lt;span style="color:#66d9ef">const&lt;/span> {
+&lt;span style="color:#66d9ef">if&lt;/span> (ELF_ST_TYPE(s&lt;span style="color:#f92672">-&amp;gt;&lt;/span>st_info) &lt;span style="color:#f92672">==&lt;/span> STT_GNU_IFUNC) {
+&lt;span style="color:#66d9ef">return&lt;/span> &lt;span style="color:#a6e22e">call_ifunc_resolver&lt;/span>(s&lt;span style="color:#f92672">-&amp;gt;&lt;/span>st_value &lt;span style="color:#f92672">+&lt;/span> load_bias);
+}
+&lt;span style="color:#66d9ef">return&lt;/span> &lt;span style="color:#66d9ef">static_cast&lt;/span>&lt;span style="color:#f92672">&amp;lt;&lt;/span>ElfW(Addr)&lt;span style="color:#f92672">&amp;gt;&lt;/span>(s&lt;span style="color:#f92672">-&amp;gt;&lt;/span>st_value &lt;span style="color:#f92672">+&lt;/span> load_bias);
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>As most symbols are of type &lt;code>STT_FUNC&lt;/code>, we just consider the second return statement.&lt;/p>
+&lt;p>Finally, the result of &lt;code>resolve_symbol_address(sym)&lt;/code> is stored in &lt;a href="https://cs.android.com/android/platform/superproject/+/master:bionic/linker/linker_relocate.cpp;l=289">&lt;code>sym_addr&lt;/code>&lt;/a> and used in&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C++" data-lang="C++">&lt;span style="color:#66d9ef">if&lt;/span> &lt;span style="color:#a6e22e">constexpr&lt;/span> (IsGeneral &lt;span style="color:#f92672">||&lt;/span> Mode &lt;span style="color:#f92672">==&lt;/span> RelocMode&lt;span style="color:#f92672">::&lt;/span>JumpTable) {
+&lt;span style="color:#66d9ef">if&lt;/span> (r_type &lt;span style="color:#f92672">==&lt;/span> R_GENERIC_JUMP_SLOT) {
+count_relocation_if&lt;span style="color:#f92672">&amp;lt;&lt;/span>IsGeneral&lt;span style="color:#f92672">&amp;gt;&lt;/span>(kRelocAbsolute);
+&lt;span style="color:#66d9ef">const&lt;/span> ElfW(Addr) result &lt;span style="color:#f92672">=&lt;/span> sym_addr &lt;span style="color:#f92672">+&lt;/span> get_addend_norel();
+trace_reloc(&lt;span style="color:#e6db74">&amp;#34;RELO JMP_SLOT %16p &amp;lt;- %16p %s&amp;#34;&lt;/span>,
+rel_target, &lt;span style="color:#66d9ef">reinterpret_cast&lt;/span>&lt;span style="color:#f92672">&amp;lt;&lt;/span>&lt;span style="color:#66d9ef">void&lt;/span>&lt;span style="color:#f92672">*&amp;gt;&lt;/span>(result), sym_name);
+&lt;span style="color:#f92672">*&lt;/span>&lt;span style="color:#66d9ef">static_cast&lt;/span>&lt;span style="color:#f92672">&amp;lt;&lt;/span>ElfW(Addr)&lt;span style="color:#f92672">*&amp;gt;&lt;/span>(rel_target) &lt;span style="color:#f92672">=&lt;/span> result;
+&lt;span style="color:#66d9ef">return&lt;/span> true;
+}
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>This will write the address of the symbol into the corresponding &lt;em>.got.plt&lt;/em> - entry.&lt;/p>
+&lt;p>All in all this happens at startup of a program. We started at &lt;code>execve&lt;/code> and only considered dynamic linker code that is executed before the program gets in charge (i.e. before the dynamic linker returns from &lt;code>linker_main&lt;/code>). Therefore the dynamic linker always uses &lt;code>BIND_NOW&lt;/code>.&lt;/p>
+&lt;h5 id="symbol-hashing-and-lief">Symbol Hashing and LIEF&lt;/h5>
+&lt;p>In order to quickly determine, whether a symbol is defined in an ELF - file, two sections can be utilised:&lt;/p>
+&lt;ol>
+&lt;li>&lt;em>.gnu.hash&lt;/em>&lt;/li>
+&lt;li>&lt;em>.hash&lt;/em>&lt;/li>
+&lt;/ol>
+&lt;p>We will only focus on &lt;em>.gnu.hash&lt;/em>, because it suffices for showcasing the problem.&lt;/p>
+&lt;p>From the previous section we know that the dynamic linker performs a symbol lookup via &lt;a href="https://cs.android.com/android/platform/superproject/+/master:bionic/linker/linker_soinfo.cpp;l=119">&lt;code>soinfo_do_lookup_impl&lt;/code>&lt;/a>. To be precise, it will iterate over all libraries defined in &lt;code>lookup_list&lt;/code> and use the Bloom filter in &lt;em>.gnu.hash&lt;/em> to check whether a symbol is defined in an ELF - file or not. If the Bloom filter &amp;ldquo;says no&amp;rdquo;, the symbol is &lt;strong>not&lt;/strong> defined in that ELF - file with probability assumed to be 100%. If the Bloom filter &amp;ldquo;says probably yes&amp;rdquo;, then further checks are needed to identify whether the symbol is really defined in that ELF - file (for those interested, see &lt;a href="https://cs.android.com/android/platform/superproject/+/master:bionic/linker/linker_soinfo.cpp;l=151">this&lt;/a>).&lt;/p>
+&lt;p>This implies that there needs to be an entry in &lt;em>.gnu.hash&lt;/em> in order for the dynamic linker to take a corresponding symbol definition into account. Unfortunately, LIEF does &lt;strong>not&lt;/strong> create a new entry in &lt;em>.gnu.hash&lt;/em> upon adding a new symbol to &lt;em>.dynsym&lt;/em>. Neither does &lt;code>rawelf_injection&lt;/code>, as it was designed according to &lt;em>System V gABI&lt;/em>, which does not even mention &lt;em>.gnu.hash&lt;/em>. Therefore overwriting an existing symbol in &lt;em>.dynsym&lt;/em> using &lt;code>rawelf_injection&lt;/code> will also not create/overwrite a &lt;em>.gnu.hash&lt;/em> - entry. This leaves us with overwriting symbols, whose symbol names are already defined in &lt;em>.gnu.hash&lt;/em> of the ELF - file we are manipulating. Thus we cannot overwrite symbols that are defined in other shared object files unless we manipulate the respective libraries. Lets assume we have a symbol to overwrite, then there is a limitation to what the corresponding &lt;em>.dynsym&lt;/em> - entry must look like. Notice that in &lt;a href="https://cs.android.com/android/platform/superproject/+/master:bionic/linker/linker_soinfo.cpp;l=187">&lt;code>soinfo_do_lookup_impl&lt;/code>&lt;/a> there is a call to &lt;a href="https://cs.android.com/android/platform/superproject/+/master:bionic/linker/linker_relocate.h;l=60">&lt;code>is_symbol_global_and_defined&lt;/code>&lt;/a>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C++" data-lang="C++">&lt;span style="color:#66d9ef">inline&lt;/span> &lt;span style="color:#66d9ef">bool&lt;/span> &lt;span style="color:#a6e22e">is_symbol_global_and_defined&lt;/span>(&lt;span style="color:#66d9ef">const&lt;/span> soinfo&lt;span style="color:#f92672">*&lt;/span> si, &lt;span style="color:#66d9ef">const&lt;/span> ElfW(Sym)&lt;span style="color:#f92672">*&lt;/span> s) {
+&lt;span style="color:#66d9ef">if&lt;/span> (__predict_true(ELF_ST_BIND(s&lt;span style="color:#f92672">-&amp;gt;&lt;/span>st_info) &lt;span style="color:#f92672">==&lt;/span> STB_GLOBAL &lt;span style="color:#f92672">||&lt;/span>
+ELF_ST_BIND(s&lt;span style="color:#f92672">-&amp;gt;&lt;/span>st_info) &lt;span style="color:#f92672">==&lt;/span> STB_WEAK)) {
+&lt;span style="color:#66d9ef">return&lt;/span> s&lt;span style="color:#f92672">-&amp;gt;&lt;/span>st_shndx &lt;span style="color:#f92672">!=&lt;/span> SHN_UNDEF;
+} &lt;span style="color:#66d9ef">else&lt;/span> &lt;span style="color:#66d9ef">if&lt;/span> (__predict_false(ELF_ST_BIND(s&lt;span style="color:#f92672">-&amp;gt;&lt;/span>st_info) &lt;span style="color:#f92672">!=&lt;/span> STB_LOCAL)) {
+DL_WARN(&lt;span style="color:#e6db74">&amp;#34;Warning: unexpected ST_BIND value: %d for &lt;/span>&lt;span style="color:#ae81ff">\&amp;#34;&lt;/span>&lt;span style="color:#e6db74">%s&lt;/span>&lt;span style="color:#ae81ff">\&amp;#34;&lt;/span>&lt;span style="color:#e6db74"> in &lt;/span>&lt;span style="color:#ae81ff">\&amp;#34;&lt;/span>&lt;span style="color:#e6db74">%s&lt;/span>&lt;span style="color:#ae81ff">\&amp;#34;&lt;/span>&lt;span style="color:#e6db74"> (ignoring)&amp;#34;&lt;/span>,
+ELF_ST_BIND(s&lt;span style="color:#f92672">-&amp;gt;&lt;/span>st_info), si&lt;span style="color:#f92672">-&amp;gt;&lt;/span>get_string(s&lt;span style="color:#f92672">-&amp;gt;&lt;/span>st_name), si&lt;span style="color:#f92672">-&amp;gt;&lt;/span>get_realpath());
+}
+&lt;span style="color:#66d9ef">return&lt;/span> false;
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>This function has to return &lt;code>true&lt;/code> in order for our symbol to be returned by &lt;code>soinfo_do_lookup_impl&lt;/code>. Therefore, its binding must ensure that the symbol is globally available, i.e. either &lt;code>STB_GLOBAL&lt;/code> or &lt;code>STB_WEAK&lt;/code>, and the symbol has to be defined in relation to some section, whose index is not 0. (We have not talked about &lt;a href="https://cs.android.com/android/platform/superproject/+/master:bionic/linker/linker_soinfo.cpp;l=184">symbol version checks&lt;/a> yet that introduce further complexity if there is a section of type &lt;code>SHT_VERSYM&lt;/code>. Note that &lt;a href="https://cs.android.com/android/platform/superproject/+/master:bionic/linker/linker_soinfo.cpp;l=108">&lt;code>check_symbol_version&lt;/code>&lt;/a> also has to return &lt;code>true&lt;/code> for the symbol resolution to succeed.)&lt;/p>
+&lt;p>Thus manipulating &lt;em>.dynsym&lt;/em> of an ELF - file is limited to the symbols that have a corresponding &lt;em>.gnu.hash&lt;/em> - entry.&lt;/p>
+&lt;p>Combining the facts that the dynamic linker defaults to &lt;code>BIND_NOW&lt;/code> and uses hash tables like &lt;em>.gnu.hash&lt;/em> and &lt;em>.hash&lt;/em>, overwriting a &lt;em>.dynsym&lt;/em> - entry will be ignored and changes in e.g. &lt;em>.got.plt&lt;/em> will be overwritten, if there is no corresponding hash entry. Having lazy - binding would relax the situation a bit, as the symbol lookup would be delayed as much as possible, allowing further manipulations at runtime. &lt;code>BIND_NOW&lt;/code> enforces the existence of a hash table entry at startup in order for &lt;em>.dynsym&lt;/em> - based injection to work. Alternatively we could overwrite a relocation entry of type &lt;code>R_AARCH64_JUMP_SLOT&lt;/code>, which does not seem to require any other changes than in &lt;em>.rel(a).plt&lt;/em>.&lt;/p>
+&lt;h3 id="dynamic---based-injection">&lt;em>.dynamic&lt;/em> - based Injection&lt;/h3>
+&lt;p>Finally, the most common technique is described. This approach requires dynamic linking, i.e. if the target binary is statically linked and there is no &lt;em>.dynamic&lt;/em> - section, then this technique will &lt;strong>not&lt;/strong> work. Also we assume that all inserted &lt;em>.dynamic&lt;/em> - entries have the tag &lt;code>DT_NEEDED&lt;/code> to allow loading arbitrary shared object files. The corresponding &lt;code>d_val&lt;/code> is an offset into &lt;em>.dynstr&lt;/em>.&lt;/p>
+&lt;p>The following subtechniques can be derived:&lt;/p>
+&lt;ol>
+&lt;li>Inserting a new &lt;em>.dynamic&lt;/em> - entry into &lt;em>.dynamic&lt;/em> and a new string into &lt;em>.dynstr&lt;/em>. Like in segment - based injection, this is the least intrusive and only reversible technique and is supported by LIEF. One issue is that it requires new memory to be inserted. E.g. on an ARM64 architecture with Android 12 (API level 31) and a NDK r23b build of a &amp;ldquo;Hello World&amp;rdquo; - application, &lt;em>.dynamic&lt;/em> is located between &lt;em>.plt&lt;/em> and &lt;em>.got&lt;/em>/&lt;em>.got.plt&lt;/em>. Therefore, inserting new memory will invalidate cross - references.&lt;/li>
+&lt;li>Similar to the above, overwriting an existing &lt;em>.dynamic&lt;/em> - entry and inserting a new string results in a recomputation of all patchable references.&lt;/li>
+&lt;li>Inserting a new &lt;em>.dynamic&lt;/em> - entry with a chosen string offset as &lt;code>d_val&lt;/code> requires to find a &amp;ldquo;suitable&amp;rdquo; substring in &lt;em>.dynstr&lt;/em>. Thinking of Frida, this substring should be of the form &amp;ldquo;substring.so&amp;rdquo;. This allows the use of configuration files for &lt;em>frida-gadget.so&lt;/em>.&lt;/li>
+&lt;li>At last we can overwrite an existing &lt;em>.dynamic&lt;/em> - entry and use a &amp;ldquo;suitable&amp;rdquo; substring. Notice that some compilers (like e.g. gcc) like to generate a &lt;em>.dynamic&lt;/em> - entry with tag &lt;code>DT_DEBUG&lt;/code>. Its value is application - dependent. As this is marked as optional in System V gABI, it can be overwritten. If the application needs this &lt;em>.dynamic&lt;/em> - entry, then you will have to restore this entry in the initialisation function of your shared object file.&lt;/li>
+&lt;/ol>
+&lt;p>One main concern is that LIEF does not support using substrings. If LIEF sees that a &lt;em>.dynamic&lt;/em> - entry with tag &lt;code>DT_NEEDED&lt;/code> is inserted, it will insert a new string. Thus &lt;code>rawelf_injection&lt;/code> will be used for substring - related techniques. Also overwriting an existing &lt;em>.dynamic&lt;/em> - entry and inserting a new string is implemented by using the sequence&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-python" data-lang="python">binary&lt;span style="color:#f92672">.&lt;/span>remove(binary&lt;span style="color:#f92672">.&lt;/span>dynamic_entries[index])
+binary&lt;span style="color:#f92672">.&lt;/span>add_library(string)
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>If the &lt;em>.dynamic&lt;/em> - entry indexed by &lt;code>index&lt;/code> is e.g. a &lt;code>DT_NEEDED&lt;/code> - entry, then LIEF will also remove the corresponding string from &lt;em>.dynstr&lt;/em>. One must be cautious when removing &lt;em>.dynamic&lt;/em> - entries with LIEF.&lt;/p>
+&lt;p>Lets consider a figure that describes the last subtechnique:
+&lt;img src="https://lolcads.github.io/2022/07/technique_dynamic_override_substring.png" alt="Overwrite .dynamic entry with substring">&lt;/p>
+&lt;h2 id="applicability">Applicability&lt;/h2>
+&lt;p>Having seen all of those techniques, we should summarise what techniques are usable and under which circumstances. For that, please see the following table. The test environment is always on AMR64 and Android 12 (API level 31). Notice that we consider LIEF as a black - box and assume its correctness to be given.&lt;/p>
+&lt;table>
+&lt;thead>
+&lt;tr>
+&lt;th>Technique&lt;/th>
+&lt;th>Subtype&lt;/th>
+&lt;th>Usable&lt;/th>
+&lt;th>Constraints &amp;amp; Challenges&lt;/th>
+&lt;/tr>
+&lt;/thead>
+&lt;tbody>
+&lt;tr>
+&lt;td>Insert Memory&lt;/td>
+&lt;td>-&lt;/td>
+&lt;td>Yes&lt;/td>
+&lt;td>&lt;code>adrp&lt;/code>, invalid cross - references, inserting memory after loadable with &lt;code>p_filesz=0&lt;/code>, permissions, overlapping loadables&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>Code Caves&lt;/td>
+&lt;td>Extension&lt;/td>
+&lt;td>Yes&lt;/td>
+&lt;td>segment permissions, &lt;code>adrp&lt;/code>, overlapping loadables&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>&lt;/td>
+&lt;td>PHT Insert&lt;/td>
+&lt;td>Yes&lt;/td>
+&lt;td>Insert Memory issues, possibly order of loadables, &amp;hellip;&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>&lt;/td>
+&lt;td>PHT Overwrite&lt;/td>
+&lt;td>Yes&lt;/td>
+&lt;td>finding &amp;ldquo;suitable&amp;rdquo; PHT - entry, &lt;code>adrp&lt;/code> because different &lt;code>p_memsz&lt;/code>, possibly order of loadables, &amp;hellip;&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>Segments&lt;/td>
+&lt;td>Inject(PHT)+Inject(Memory)&lt;/td>
+&lt;td>Yes&lt;/td>
+&lt;td>None, unless LIEF messes up&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>&lt;/td>
+&lt;td>Overwrite+Overwrite&lt;/td>
+&lt;td>Rather no&lt;/td>
+&lt;td>finding &amp;ldquo;suitable&amp;rdquo; PHT - entry, finding &amp;ldquo;suitable&amp;rdquo; segment, &lt;code>adrp&lt;/code> because different &lt;code>p_memsz&lt;/code>, possibly order of loadables&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>&lt;/td>
+&lt;td>Overwrite+Inject&lt;/td>
+&lt;td>Rather yes&lt;/td>
+&lt;td>Insert Memory issues, finding &amp;ldquo;suitable&amp;rdquo; PHT - entry, possibly order of loadables&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>&lt;/td>
+&lt;td>Inject+Overwrite&lt;/td>
+&lt;td>Rather no&lt;/td>
+&lt;td>Insert Memory issues, finding &amp;ldquo;suitable&amp;rdquo; segment, possibly order of loadables&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>Entry Point&lt;/td>
+&lt;td>-&lt;/td>
+&lt;td>Yes&lt;/td>
+&lt;td>need virtual address&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>&lt;em>.dynsym&lt;/em>&lt;/td>
+&lt;td>Insert Symbol&lt;/td>
+&lt;td>No&lt;/td>
+&lt;td>Dynamic Linker always uses &lt;code>BIND_NOW&lt;/code>, need specific hash table entries&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>&lt;/td>
+&lt;td>Overwrite Symbol&lt;/td>
+&lt;td>No&lt;/td>
+&lt;td>Insert Symbol issues&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>&lt;em>.dynamic&lt;/em>&lt;/td>
+&lt;td>Inject(.dynamic)+Inject(.dynstr)&lt;/td>
+&lt;td>Yes&lt;/td>
+&lt;td>None, unless LIEF messes up&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>&lt;/td>
+&lt;td>Overwrite+Inject&lt;/td>
+&lt;td>Yes&lt;/td>
+&lt;td>None, unless LIEF messes up&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>&lt;/td>
+&lt;td>Inject+Substring&lt;/td>
+&lt;td>Yes&lt;/td>
+&lt;td>finding &amp;ldquo;suitable&amp;rdquo; substring&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>&lt;/td>
+&lt;td>Overwrite+Substring&lt;/td>
+&lt;td>Yes&lt;/td>
+&lt;td>finding &amp;ldquo;suitable&amp;rdquo; substring, finding &amp;ldquo;suitable&amp;rdquo; &lt;em>.dynamic&lt;/em> - entry&lt;/td>
+&lt;/tr>
+&lt;/tbody>
+&lt;/table>
+&lt;p>It is needless to say that overwriting vital structures like e.g. the ELF - header will completely break the binary. Always think about it twice when considering to overwrite something.&lt;/p>
+&lt;p>All in all we can see that most techniques work. I must emphasize that the above &lt;strong>table is solely based on tests on a single platform for a single binary&lt;/strong>. Although theoretically correct, in practice many techniques can still fail due to bugs in the implementation on my side or deviations from specifications and standards on the vendor&amp;rsquo;s side. Also you should take the &amp;ldquo;Usable&amp;rdquo; - column with a grain of salt: it highly assumes that the user knows what he/she is doing. Blindly injecting memory will most likely result in segmentation faults.&lt;/p>
+&lt;h2 id="practical-examples">Practical Examples&lt;/h2>
+&lt;p>In this section we want to see whether these techniques can be used to make Frida work. Notice that for simplicity, we will only use &lt;em>.dynamic&lt;/em> - based injection to get Frida to run. This is justified by the fact that writing shellcode that is able to either track down &lt;code>dlopen&lt;/code> and thus libc or load a shared object file manually is non - trivial. To prove that other techniques work aswell I will provide shellcode that writes a plain &amp;ldquo;Hello World!&amp;rdquo; text to stdout and exits with code &lt;code>42&lt;/code>.&lt;/p>
+&lt;h3 id="experiment-setup">Experiment Setup&lt;/h3>
+&lt;p>In order to test the library, one may go ahead and create an Android Virtual Device (AVD) with API level 31 or above to support aarch64 - binaries (i.e. ARM64). Then run the emulator, e.g. via console&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">emulator -avd Pixel_3_API_31
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>where &lt;code>emulator&lt;/code> is a tool in the Android SDK. The name of the AVD may differ.&lt;/p>
+&lt;p>Then use &lt;code>adb&lt;/code> to get a shell into the emulator using&lt;/p>
+&lt;pre tabindex="0">&lt;code>adb shell
+&lt;/code>&lt;/pre>&lt;p>This assumes that there is only one emulator running. Otherwise you need to specify the avd or its debug port.&lt;/p>
+&lt;p>Finally, cross-compile a C program of your choice by utilising the Android NDK or take a binary that is a result of the &lt;em>Ahead-Of-Time&lt;/em> step of ART. Either way you should end up with an ELF - file. When cross - compiling a C program, use&lt;/p>
+&lt;pre tabindex="0">&lt;code>adb push /path/to/binary /local/data/tmp/binary
+&lt;/code>&lt;/pre>&lt;p>to get the binary into the emulator.&lt;/p>
+&lt;p>As the python library only runs on AMD64, you should apply the techniques before pushing the ELF - file to the emulator.&lt;/p>
+&lt;h3 id="hello-world---example">Hello World - Example&lt;/h3>
+&lt;p>Lets use code cave - based injection. For simplicity, we assume that there is a code cave between loadable segments.&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-python" data-lang="python">&lt;span style="color:#75715e">#import lief&lt;/span>
+&lt;span style="color:#f92672">from&lt;/span> ElfInjection.Binary &lt;span style="color:#f92672">import&lt;/span> ElfBinary
+&lt;span style="color:#f92672">from&lt;/span> ElfInjection.CodeInjector &lt;span style="color:#f92672">import&lt;/span> ElfCodeInjector
+&lt;span style="color:#f92672">from&lt;/span> ElfInjection.Seekers.CodeCaveSeeker &lt;span style="color:#f92672">import&lt;/span> &lt;span style="color:#f92672">*&lt;/span>
+&lt;span style="color:#66d9ef">def&lt;/span> &lt;span style="color:#a6e22e">main&lt;/span>():
+&lt;span style="color:#75715e"># 0. Introduce artificial code cave&lt;/span>
+&lt;span style="color:#75715e">#binary = lief.parse(&amp;#39;./libs/arm64-v8a/hello&amp;#39;)&lt;/span>
+&lt;span style="color:#75715e">#binary.add(binary.get(lief.ELF.SEGMENT_TYPES.LOAD))&lt;/span>
+&lt;span style="color:#75715e">#binary.add(binary.get(lief.ELF.SEGMENT_TYPES.LOAD))&lt;/span>
+&lt;span style="color:#75715e">#binary.write(&amp;#39;./libs/arm64-v8a/hello&amp;#39;)&lt;/span>
+&lt;span style="color:#75715e"># 1. Setup variables&lt;/span>
+shellcode &lt;span style="color:#f92672">=&lt;/span> (&lt;span style="color:#e6db74">b&lt;/span>&lt;span style="color:#e6db74">&amp;#39;&lt;/span>&lt;span style="color:#ae81ff">\x0e\xa9\x8c\xd2\x8e\x8d\xad\xf2\xee&lt;/span>&lt;span style="color:#e6db74">&amp;#39;&lt;/span>
+&lt;span style="color:#f92672">+&lt;/span> &lt;span style="color:#e6db74">b&lt;/span>&lt;span style="color:#e6db74">&amp;#39;&lt;/span>&lt;span style="color:#ae81ff">\r\xc4\xf2\xee\xea\xed\xf2&lt;/span>&lt;span style="color:#e6db74">O&lt;/span>&lt;span style="color:#ae81ff">\x8e\x8d\xd2\x8f&lt;/span>&lt;span style="color:#e6db74">,&amp;#39;&lt;/span>
+&lt;span style="color:#f92672">+&lt;/span> &lt;span style="color:#e6db74">b&lt;/span>&lt;span style="color:#e6db74">&amp;#39;&lt;/span>&lt;span style="color:#ae81ff">\xa4\xf2&lt;/span>&lt;span style="color:#e6db74">O&lt;/span>&lt;span style="color:#ae81ff">\x01\xc0\xf2\xee&lt;/span>&lt;span style="color:#e6db74">?&lt;/span>&lt;span style="color:#ae81ff">\xbf\xa9&lt;/span>&lt;span style="color:#e6db74"> &lt;/span>&lt;span style="color:#ae81ff">\x00\x80&lt;/span>&lt;span style="color:#e6db74">&amp;#39;&lt;/span>
+&lt;span style="color:#f92672">+&lt;/span> &lt;span style="color:#e6db74">b&lt;/span>&lt;span style="color:#e6db74">&amp;#39;&lt;/span>&lt;span style="color:#ae81ff">\xd2\xe1\x03\x00\x91\xa2\x01\x80\xd2\x08\x08&lt;/span>&lt;span style="color:#e6db74">&amp;#39;&lt;/span>
+&lt;span style="color:#f92672">+&lt;/span> &lt;span style="color:#e6db74">b&lt;/span>&lt;span style="color:#e6db74">&amp;#39;&lt;/span>&lt;span style="color:#ae81ff">\x80\xd2\x01\x00\x00\xd4&lt;/span>&lt;span style="color:#e6db74">@&lt;/span>&lt;span style="color:#ae81ff">\x05\x80\xd2\xa8\x0b&lt;/span>&lt;span style="color:#e6db74">&amp;#39;&lt;/span>
+&lt;span style="color:#f92672">+&lt;/span> &lt;span style="color:#e6db74">b&lt;/span>&lt;span style="color:#e6db74">&amp;#39;&lt;/span>&lt;span style="color:#ae81ff">\x80\xd2\x01\x00\x00\xd4&lt;/span>&lt;span style="color:#e6db74">&amp;#39;&lt;/span>)
+&lt;span style="color:#75715e"># 2. Get the binary&lt;/span>
+binary &lt;span style="color:#f92672">=&lt;/span> ElfBinary(&lt;span style="color:#e6db74">&amp;#39;./libs/arm64-v8a/hello&amp;#39;&lt;/span>)
+injector &lt;span style="color:#f92672">=&lt;/span> ElfCodeInjector(binary)
+&lt;span style="color:#75715e"># 3. Create cave seeker and search for caves of size&lt;/span>
+&lt;span style="color:#75715e"># at least 0x100&lt;/span>
+seeker &lt;span style="color:#f92672">=&lt;/span> ElfSegmentSeeker(&lt;span style="color:#ae81ff">0x100&lt;/span>)
+caves &lt;span style="color:#f92672">=&lt;/span> injector&lt;span style="color:#f92672">.&lt;/span>findCodeCaves(seeker)
+&lt;span style="color:#75715e"># 4. Find suitable code cave...&lt;/span>
+cave &lt;span style="color:#f92672">=&lt;/span> caves[&lt;span style="color:#ae81ff">1&lt;/span>]
+&lt;span style="color:#75715e"># 5. Adjust a loadable segment. This should also be executable!&lt;/span>
+cave&lt;span style="color:#f92672">.&lt;/span>size &lt;span style="color:#f92672">=&lt;/span> len(shellcode)
+sc, _ &lt;span style="color:#f92672">=&lt;/span> injector&lt;span style="color:#f92672">.&lt;/span>injectCodeCave(&lt;span style="color:#66d9ef">None&lt;/span>, cave, shellcode)
+&lt;span style="color:#75715e"># 6. Overwrite entry point to point to whereever shellcode is&lt;/span>
+old &lt;span style="color:#f92672">=&lt;/span> injector&lt;span style="color:#f92672">.&lt;/span>overwriteEntryPoint(sc&lt;span style="color:#f92672">.&lt;/span>vaddr)
+&lt;span style="color:#75715e"># 7. Store to file&lt;/span>
+binary&lt;span style="color:#f92672">.&lt;/span>store(&lt;span style="color:#e6db74">&amp;#39;./libs/arm64-v8a/tmp&amp;#39;&lt;/span>)
+&lt;span style="color:#66d9ef">if&lt;/span> (__name__ &lt;span style="color:#f92672">==&lt;/span> &lt;span style="color:#e6db74">&amp;#39;__main__&amp;#39;&lt;/span>):
+main()
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>The above code will search for a code cave that is at least &lt;code>0x100&lt;/code> bytes in size. Then it will select the second match, fill the cave with shellcode and set the entry point to point to the shellcode. Notice that the code cave will be appended to an executable segment. The target is the same binary as in the next example.&lt;/p>
+&lt;p>Also notice that we need to artificially introduce two loadable, executable segments in order to find a code cave. If such an action is necessary to perform code cave based injection, you must reconsider whether code cave based injection is the correct choice.&lt;/p>
+&lt;h3 id="dynamic---injection-example">&lt;em>.dynamic&lt;/em> - Injection Example&lt;/h3>
+&lt;p>Finally, for &lt;em>.dynamic&lt;/em> - based injection please consider the following code:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-python" data-lang="python">&lt;span style="color:#f92672">import&lt;/span> lief
+&lt;span style="color:#f92672">from&lt;/span> ElfInjection.Binary &lt;span style="color:#f92672">import&lt;/span> ElfBinary
+&lt;span style="color:#f92672">from&lt;/span> ElfInjection.CodeInjector &lt;span style="color:#f92672">import&lt;/span> ElfCodeInjector
+&lt;span style="color:#f92672">from&lt;/span> ElfInjection.Manipulators.DynamicManipulator &lt;span style="color:#f92672">import&lt;/span> ElfDynamicOverwriter
+&lt;span style="color:#f92672">from&lt;/span> ElfInjection.Manipulators.StringManipulator &lt;span style="color:#f92672">import&lt;/span> ElfStringFinder
+&lt;span style="color:#66d9ef">def&lt;/span> &lt;span style="color:#a6e22e">main&lt;/span>():
+&lt;span style="color:#75715e"># 1. Get the binary&lt;/span>
+binary &lt;span style="color:#f92672">=&lt;/span> ElfBinary(&lt;span style="color:#e6db74">&amp;#39;./libs/arm64-v8a/hello&amp;#39;&lt;/span>)
+injector &lt;span style="color:#f92672">=&lt;/span> ElfCodeInjector(binary)
+&lt;span style="color:#75715e"># 2. Create overwriter&lt;/span>
+dyn_overwriter &lt;span style="color:#f92672">=&lt;/span> ElfDynamicOverwriter(
+tag&lt;span style="color:#f92672">=&lt;/span>lief&lt;span style="color:#f92672">.&lt;/span>ELF&lt;span style="color:#f92672">.&lt;/span>DYNAMIC_TAGS&lt;span style="color:#f92672">.&lt;/span>NEEDED,
+value&lt;span style="color:#f92672">=&lt;/span>&lt;span style="color:#ae81ff">0&lt;/span>,
+index&lt;span style="color:#f92672">=&lt;/span>&lt;span style="color:#ae81ff">6&lt;/span>
+)
+&lt;span style="color:#75715e"># 3. Create string finder&lt;/span>
+str_finder &lt;span style="color:#f92672">=&lt;/span> ElfStringFinder()
+&lt;span style="color:#75715e"># 4. Overwrite .dynamic entry with substring&lt;/span>
+dyn_info &lt;span style="color:#f92672">=&lt;/span> injector&lt;span style="color:#f92672">.&lt;/span>injectDynamic(
+str_finder,
+dyn_overwriter
+)
+&lt;span style="color:#75715e"># 5. Store to file&lt;/span>
+binary&lt;span style="color:#f92672">.&lt;/span>store(&lt;span style="color:#e6db74">&amp;#39;./libs/arm64-v8a/tmp&amp;#39;&lt;/span>)
+&lt;span style="color:#66d9ef">if&lt;/span> __name__ &lt;span style="color:#f92672">==&lt;/span> &lt;span style="color:#e6db74">&amp;#39;__main__&amp;#39;&lt;/span>:
+main()
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Because we are using an &lt;code>ElfStringFinder&lt;/code>, there is no user - supplied string injected into &lt;em>.dynstr&lt;/em>. Note that the user is responsible for providing the requested shared object file, e.g. by setting &lt;code>LD_LIBRARY_PATH&lt;/code>. We are manipulating the following program&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C" data-lang="C">&lt;span style="color:#75715e">#include&lt;/span> &lt;span style="color:#75715e">&amp;lt;unistd.h&amp;gt;&lt;/span>&lt;span style="color:#75715e">
+&lt;/span>&lt;span style="color:#75715e">#include&lt;/span> &lt;span style="color:#75715e">&amp;lt;string.h&amp;gt;&lt;/span>&lt;span style="color:#75715e">
+&lt;/span>&lt;span style="color:#75715e">&lt;/span>
+&lt;span style="color:#66d9ef">int&lt;/span> &lt;span style="color:#a6e22e">main&lt;/span>()
+{
+&lt;span style="color:#66d9ef">char&lt;/span> &lt;span style="color:#f92672">*&lt;/span>text &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#e6db74">&amp;#34;Hello World!&lt;/span>&lt;span style="color:#ae81ff">\n&lt;/span>&lt;span style="color:#e6db74">&amp;#34;&lt;/span>;
+&lt;span style="color:#66d9ef">while&lt;/span> (&lt;span style="color:#ae81ff">1&lt;/span>) {
+write(&lt;span style="color:#ae81ff">1&lt;/span>, text, strlen(text));
+sleep(&lt;span style="color:#ae81ff">1&lt;/span>);
+}
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>compiled on AMD64, Ubuntu 20.04.1 LTS with Android NDK r23b&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">ndk-build
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Investigating &lt;em>.dynamic&lt;/em> yields:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">readelf --wide --dynamic manipulated.bin
+...
+0x0000000000000001 &lt;span style="color:#f92672">(&lt;/span>NEEDED&lt;span style="color:#f92672">)&lt;/span> Shared library: &lt;span style="color:#f92672">[&lt;/span>libc.so&lt;span style="color:#f92672">]&lt;/span>
+0x0000000000000001 &lt;span style="color:#f92672">(&lt;/span>NEEDED&lt;span style="color:#f92672">)&lt;/span> Shared library: &lt;span style="color:#f92672">[&lt;/span>libm.so&lt;span style="color:#f92672">]&lt;/span>
+0x0000000000000001 &lt;span style="color:#f92672">(&lt;/span>NEEDED&lt;span style="color:#f92672">)&lt;/span> Shared library: &lt;span style="color:#f92672">[&lt;/span>libstdc++.so&lt;span style="color:#f92672">]&lt;/span>
+0x0000000000000001 &lt;span style="color:#f92672">(&lt;/span>NEEDED&lt;span style="color:#f92672">)&lt;/span> Shared library: &lt;span style="color:#f92672">[&lt;/span>libdl.so&lt;span style="color:#f92672">]&lt;/span>
+0x000000000000001e &lt;span style="color:#f92672">(&lt;/span>FLAGS&lt;span style="color:#f92672">)&lt;/span> BIND_NOW
+0x000000006ffffffb &lt;span style="color:#f92672">(&lt;/span>FLAGS_1&lt;span style="color:#f92672">)&lt;/span> Flags: NOW PIE
+0x0000000000000001 &lt;span style="color:#f92672">(&lt;/span>NEEDED&lt;span style="color:#f92672">)&lt;/span> Shared library: &lt;span style="color:#f92672">[&lt;/span>c.so&lt;span style="color:#f92672">]&lt;/span>
+0x0000000000000007 &lt;span style="color:#f92672">(&lt;/span>RELA&lt;span style="color:#f92672">)&lt;/span> 0x1490
+...
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>To see Frida in action, we first need to set the gadget&amp;rsquo;s bind address to an IP we can connect to (i.e. not localhost):&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-json" data-lang="json">{
+&lt;span style="color:#f92672">&amp;#34;interaction&amp;#34;&lt;/span>: {
+&lt;span style="color:#f92672">&amp;#34;type&amp;#34;&lt;/span>: &lt;span style="color:#e6db74">&amp;#34;listen&amp;#34;&lt;/span>,
+&lt;span style="color:#f92672">&amp;#34;address&amp;#34;&lt;/span>: &lt;span style="color:#e6db74">&amp;#34;&amp;lt;IP&amp;gt;&amp;#34;&lt;/span>,
+&lt;span style="color:#f92672">&amp;#34;port&amp;#34;&lt;/span>: &lt;span style="color:#ae81ff">27042&lt;/span>,
+&lt;span style="color:#f92672">&amp;#34;on_port_conflict&amp;#34;&lt;/span>: &lt;span style="color:#e6db74">&amp;#34;fail&amp;#34;&lt;/span>,
+&lt;span style="color:#f92672">&amp;#34;on_load&amp;#34;&lt;/span>: &lt;span style="color:#e6db74">&amp;#34;wait&amp;#34;&lt;/span>
+}
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Name this file &amp;ldquo;c.config.so&amp;rdquo;.&lt;/p>
+&lt;p>Now run the following in &lt;strong>separate&lt;/strong> shells to see Frida in action. The first shell should run something like this, setting up the test program.&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">mv frida-gadget.so c.so
+LD_LIBRARY_PATH&lt;span style="color:#f92672">=&lt;/span>. ./manipulated.bin
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>And the second shell should do the tracing:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">frida-trace -H &amp;lt;IP&amp;gt;:27042 -n &lt;span style="color:#e6db74">&amp;#34;Gadget&amp;#34;&lt;/span> -i &lt;span style="color:#e6db74">&amp;#34;write&amp;#34;&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;h2 id="sources">Sources&lt;/h2>
+&lt;ul>
+&lt;li>&lt;a href="https://cs.android.com/android">https://cs.android.com/android&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://frida.re">https://frida.re&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://frida.re/docs/gadget/">https://frida.re/docs/gadget/&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://github.com/fkie-cad/ELFbin">https://github.com/fkie-cad/ELFbin&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://github.com/frida/frida/releases">https://github.com/frida/frida/releases&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://github.com/lief-project/LIEF">https://github.com/lief-project/LIEF&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://gitlab.com/x86-psABIs/x86-64-ABI">https://gitlab.com/x86-psABIs/x86-64-ABI&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://man7.org/linux/man-pages/man2/ptrace.2.html">https://man7.org/linux/man-pages/man2/ptrace.2.html&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://man7.org/linux/man-pages/man8/ld.so.8.html">https://man7.org/linux/man-pages/man8/ld.so.8.html&lt;/a>&lt;/li>
+&lt;li>&lt;a href="http://www.sco.com/developers/gabi/latest/contents.html">http://www.sco.com/developers/gabi/latest/contents.html&lt;/a>&lt;/li>
+&lt;li>&lt;a href="http://www.sco.com/developers/gabi/latest/ch4.reloc.html">http://www.sco.com/developers/gabi/latest/ch4.reloc.html&lt;/a>&lt;/li>
+&lt;/ul></content></item></channel></rss>
