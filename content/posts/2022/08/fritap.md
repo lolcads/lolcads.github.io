@@ -1,7 +1,7 @@
 +++
 title = "friTap - Decrypting TLS on the fly"
 date = "2022-08-12T13:09:24+02:00"
-author = "Francois Egner, Daniel Baier"
+author = "Daniel Baier and Francois Egner"
 authorTwitter = "" #do not include @
 cover = ""
 tags = ["frida", "network", "TLS", "TLS decryption"]
