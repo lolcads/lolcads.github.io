@@ -98,12 +98,12 @@ After injection of the engine and the agent, the user is able to execute own Jav
 A rough overview of the flow of friTap can be seen in the following diagrams, which are explained in more detail in the sections that follow.
 The first step after loading the friTap JS script into the target process is to identify the operating system (os) of the target process:
 
-![](/2022/05/fritap_choose_os_agent_final.svg)
+![](/2022/08/fritap_choose_os_agent_final.svg)
              
 Then an os specific agent will be loaded. This agent enumerates all loaded libraries/modules from the target process. FRIDA provides a function for this purpose that returns for each loaded module its name, base address, size and path in the file system. Based on the name of the modules friTap can identify a SSL/TLS library. Depending on the version and operating system, the name of the loaded module can vary greatly. friTap tries to cover all potential module names of supported libraries as best as possible using expressive regex. The operating system-specific agent determines which libraries are supported and how its hooking is implemented:
 
 
-![](/2022/05/fritap_hook.svg)
+![](/2022/08/fritap_hook.svg)
 
  When a supported library is detected, friTap tries to hook the `SSL-read()`, `SSL-write()` and `SSL-keyexport()` functions of the respective library and all other functions required for this. Sometimes the target library doesn't provide a key export function, in those cases friTap have to parse the heap in order to find the keys in the memory of the target process.
 
