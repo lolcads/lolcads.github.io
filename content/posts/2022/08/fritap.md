@@ -42,7 +42,7 @@ One thing is certain: in order to get the unencrypted communication, the client 
 
 Most applications that perform encrypted communication use a widely available library to do so, such as OpenSSL and NSS. These libraries try to keep the encryption of the data as abstract as possible, so that the use of the library is very convenient. Among other things, they encapsulate the TLS handshake and the sending and receiving of encrypted data.
 
-A common program flow utilizng a TLS library looks like this:
+A common program flow utilizing a TLS library looks like this:
 
 The application wants to establish a secure TLS connection to a server. It uses the TLS library for this purpose, which performs the handshake as shown below:
 
