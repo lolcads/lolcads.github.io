@@ -14,7 +14,7 @@ To establish encrypted communication via TLS, for example, a certificate is requ
 &lt;p>One thing is certain: in order to get the unencrypted communication, the client application must be &amp;ldquo;attacked&amp;rdquo;. This led us to ask why we don&amp;rsquo;t directly extract the decrypted SSL/TLS stream or the key material from the target appliaction.&lt;/p>
 &lt;h3 id="abstraction-of-using-a-library">Abstraction of using a library&lt;/h3>
 &lt;p>Most applications that perform encrypted communication use a widely available library to do so, such as OpenSSL and NSS. These libraries try to keep the encryption of the data as abstract as possible, so that the use of the library is very convenient. Among other things, they encapsulate the TLS handshake and the sending and receiving of encrypted data.&lt;/p>
-&lt;p>A common program flow utilizng a TLS library looks like this:&lt;/p>
+&lt;p>A common program flow utilizing a TLS library looks like this:&lt;/p>
 &lt;p>The application wants to establish a secure TLS connection to a server. It uses the TLS library for this purpose, which performs the handshake as shown below:&lt;/p>
 &lt;p>&lt;img src="https://lolcads.github.io/2022/08/connection.gif" alt="GIF here">&lt;/p>
 &lt;p>After establishing the TLS connection, data can now be sent and received using the read and write functions of the TLS library as shown in the figure below.&lt;/p>
