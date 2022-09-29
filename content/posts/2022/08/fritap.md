@@ -405,7 +405,7 @@ For each operating system, friTap knows the usual library/module and the functio
 
 ## Special Thanks
 
-We like to thank our college Max J. Ufer for his initial work in creating friTap. Further we like to thank Martin Lambertz and Jan-Niclas Hilgert for their feedback while working on friTap. Finally we have to thank Ole André Vadla Ravnås for his tireless efforts in the development of FRIDA. 
+We like to thank our colleague Max J. Ufer for his initial work in creating friTap. Further we like to thank Martin Lambertz and Jan-Niclas Hilgert for their feedback while working on friTap. Finally we have to thank Ole André Vadla Ravnås for his tireless efforts in the development of FRIDA.
 
 ## Getting started
 
