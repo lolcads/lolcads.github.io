@@ -115,4 +115,7 @@ io&lt;span style="color:#f92672">.&lt;/span>exit()
 &lt;span style="color:#66d9ef">if&lt;/span> (__name__ &lt;span style="color:#f92672">==&lt;/span> &lt;span style="color:#e6db74">&amp;#39;__main__&amp;#39;&lt;/span>):
 main()
 &lt;/code>&lt;/pre>&lt;/div>&lt;h1 id="summary">Summary&lt;/h1>
-&lt;p>In this post, &lt;em>damnvulnerableapp&lt;/em> aka &lt;em>E&lt;!-- raw HTML omitted -->2&lt;!-- raw HTML omitted -->VA&lt;/em> was presented as an Android app that manages custom vulnerable modules that can be used for vulnerability research on Android OS&amp;rsquo;s. To that end, the modules try to cover different vulnerability classes to allow for discovery of Android - specific difficulities in binary exploitation.&lt;/p></content></item></channel></rss>
+&lt;p>In this post, &lt;em>damnvulnerableapp&lt;/em> aka &lt;em>E&lt;!-- raw HTML omitted -->2&lt;!-- raw HTML omitted -->VA&lt;/em> was presented as an Android app that manages custom vulnerable modules that can be used for vulnerability research on Android OS&amp;rsquo;s. To that end, the modules try to cover different vulnerability classes to allow for discovery of Android - specific difficulities in binary exploitation.
+In our next post we dive into the first vulnerability and how to exploit it. Stay tuned.&lt;/p>
+&lt;h2 id="getting-started">Getting started&lt;/h2>
+&lt;p>E&lt;!-- raw HTML omitted -->2&lt;!-- raw HTML omitted -->VA can be downloaded here: &lt;a href="https://github.com/fkie-cad/eeva">https://github.com/fkie-cad/eeva&lt;/a>&lt;/p></content></item></channel></rss>
