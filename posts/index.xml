@@ -39,7 +39,7 @@ Warning The following app is intended to be vulnerable to specific attacks and c
 &lt;/ol>
 &lt;p>Consider the composition of a vulnerable module:
 &lt;img src="https://lolcads.github.io/2022/11/eeva.svg" alt="Composition of vulnerable modules">&lt;/p>
-&lt;p>As can be seen in the above diagram, every (currently) every module uses JNI functions to introduce vulnerabilities to be exploited. This is where binary exploitation becomes applicable to Java, namely due to native function calls.&lt;/p>
+&lt;p>As can be seen in the above diagram, every (currently) module uses JNI functions to introduce vulnerabilities to be exploited. This is where binary exploitation becomes applicable to Java, namely due to native function calls.&lt;/p>
 &lt;h4 id="communication-with-vulnerable-modules">Communication with vulnerable modules&lt;/h4>
 &lt;p>&lt;em>damnvulnerableapp&lt;/em> will listen for incoming connections on port &lt;code>8080&lt;/code>. If it is run on an emulator, an external user may connect through &lt;code>nc 127.0.0.1 8080&lt;/code>. Before this is possible, one needs to run&lt;/p>
 &lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">$ adb forward tcp:8080 tcp:8080
