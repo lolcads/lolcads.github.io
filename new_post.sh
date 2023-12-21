@@ -15,6 +15,7 @@ static_images_path="static/${year}/${month}"
 if [[ ! -e  $static_images_path ]]
 then
     mkdir -p $static_images_path
+    touch $static_images_path/.gitkeep
     echo "info: created ${static_images_path} for images"
 else
     echo "info: you can use ${static_images_path} for images"
