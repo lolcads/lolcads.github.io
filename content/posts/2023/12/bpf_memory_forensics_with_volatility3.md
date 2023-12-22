@@ -25,7 +25,8 @@ Well, you say, rootkits have been doing that for more than 20 years now, so what
 
 The above picture was generated from the memory image of a system infected with [`ebpfkit`](https://github.com/Gui774ume/ebpfkit), an open-source PoC rootkit from 2021, using a plugin for the [Volatility 3](https://github.com/volatilityfoundation/volatility3) memory forensics framework. In this blog post, we will present a total of seven plugins that, taken together, facilitate an in depth analysis of the state of the BPF subsystem.
 
-We structured this post as follows: The next section provides an introduction to the BPF subsystem, while the third section highlights its potential for (ab)use by malware. In section four, we will introduce four essential plugins that facilitate the examination of BPF malware. Subsequently, we will discuss three advanced plugins that utilize the fundamental plugins to perform more specialized analyses. In section five, we present a case study, and in section six, we conclude with a discussion of supported kernel versions and configurations, other challenges we encountered, and open questions.
+We structured this post as follows: The next section provides an introduction to the BPF subsystem, while the third section highlights its potential for (ab)use by malware. In section four, we will introduce seven Volatility 3 plugins that facilitate the examination of BPF malware. Section five presents a case study, followed by a section describing our testing and evaluation of the plugins on various Linux distributions.
+In the last section, we conclude with a discussion of the steps that are necessary to integrate our work into the upstream Volatility project, other challenges we encountered, and open research questions.
 
 _Note: The words "eBPF" and "BPF" will be used interchangeably throughout this post._
 
@@ -33,7 +34,7 @@ _Note: The words "eBPF" and "BPF" will be used interchangeably throughout this p
 
 Before delving into the complexities of memory forensics, it is necessary to establish some basics about the BPF subsystem. Readers that are already familiar with the topic can safely skip this section.
 
-To me, BPF is first of all an __instruction set architecture (ISA)__. It has ten general purpose registers, which are 64 bit wide, and there are all of the basic operations that you would expect a modern ISA to have. Its creator, Alexei Starovoitov, once described it as a kind of simplified x86-64 and would probably never have imagined that the ISA he cooked up back in 2014 would once enter a standardization process at the IETF. The interested reader can find the current proposed standard [here](https://datatracker.ietf.org/doc/draft-ietf-bpf-isa/). Of course, there are all the other things that you would expect to come with an ISA, like an ABI that defines the calling convention, and a binary encoding that maps instructions to sequences of four or eight bytes.
+To us, BPF is first of all an __instruction set architecture (ISA)__. It has ten general purpose registers, which are 64 bit wide, and there are all of the basic operations that you would expect a modern ISA to have. Its creator, Alexei Starovoitov, once described it as a kind of simplified x86-64 and would probably never have imagined that the ISA he cooked up back in 2014 would once enter a standardization process at the IETF. The interested reader can find the current proposed standard [here](https://datatracker.ietf.org/doc/draft-ietf-bpf-isa/). Of course, there are all the other things that you would expect to come with an ISA, like an ABI that defines the calling convention, and a binary encoding that maps instructions to sequences of four or eight bytes.
 
 The BPF ISA is used as a compilation target (currently by clang - gcc support is on the way) for programs written in high-level languages (currently C and Rust), however, it is not meant to be implemented in hardware. Therefore, it is conceptually more similar to WebAssembly or Java Bytecode than x86-64 or arm64, i.e., BPF programs are meant to be executed by a __runtime__ that implements the BPF virtual machine (VM). Several BPF runtimes exist, but the "reference implementation” is in the Linux kernel.
 
@@ -522,7 +523,7 @@ Additionally, to the above mentioned kernels we also developed an evaluation fra
 - Debian 11 - Linux kernel 5.10.0-26-amd64 ✅
 - Debian 12 - Linux kernel 6.1.0-13-amd64 ✅
 - Ubuntu 22.04 - Linux kernel 5.15.0-88-generic ✅
-- Ubuntu 23.10 - Linux kernel 6.5.0-10-generic 🪲 ([dwarf2json GitHub Issue](https://github.com/volatilityfoundation/dwarf2json/issues/57))
+- Ubuntu 23.10 - Linux kernel 6.5.0-10-generic ✅ (works partially, but process listing is broken due to this [dwarf2json GitHub Issue](https://github.com/volatilityfoundation/dwarf2json/issues/57))
 - ArchLinux - Linux kernel 6.6.7-arch1-1 ✅ (works partially, but breaks probably due to the same issue as [volatility3/dwarf2json GitHub Issue](https://github.com/volatilityfoundation/volatility3/issues/1065))
 - openSUSE Tumbleweed - 🪲 we currently did not find the debugging symbols in the debugging kernel ([openSUSE Bugzilla](https://bugzilla.opensuse.org/show_bug.cgi?id=1218163))
 
@@ -558,7 +559,7 @@ This project grew out of the preparation of a [workshop](https://web.archive.org
 
 While the workshop, our plugins, and this post are an important step towards this goal, much work remains to be done. First, in order for the present work to be useful in the real world our next goal must be to upstream most of it into the Volatility 3 project. Only this will ensure that investigators all around the world will be able to easily find and use it. This will require:
 
-- refactoring of our utility code to use Volatility 3's extension class mechanism
+- Refactoring of our utility code to use Volatility 3's extension class mechanism
 - The `bpf_graph` plugin relies on [networkx](https://networkx.org/documentation/stable/reference/algorithms/index.html), which is not yet a dependency of Volatility 3. If the introduction of a new dependency into the upstream project is not feasible, one could make it optional by checking for the presence of the package within the plugin.
 - Additional testing on older kernel versions and kernels with diverse configurations to meet Volatility's high standards regarding compatibility
 
