@@ -525,7 +525,7 @@ Additionally, to the above mentioned kernels we also developed an evaluation fra
 - Ubuntu 22.04 - Linux kernel 5.15.0-88-generic ✅
 - Ubuntu 23.10 - Linux kernel 6.5.0-10-generic ✅ (works partially, but process listing is broken due to this [dwarf2json GitHub Issue](https://github.com/volatilityfoundation/dwarf2json/issues/57))
 - ArchLinux - Linux kernel 6.6.7-arch1-1 ✅ (works partially, but breaks probably due to the same issue as [volatility3/dwarf2json GitHub Issue](https://github.com/volatilityfoundation/volatility3/issues/1065))
-- openSUSE Tumbleweed - 🪲 we currently did not find the debugging symbols in the debugging kernel ([openSUSE Bugzilla](https://bugzilla.opensuse.org/show_bug.cgi?id=1218163))
+- openSUSE Tumbleweed - ❓ it seems that the debug kernel that is provided by OpenSUSE *does* contain debugging symbols but other sections such as `.rodata` are removed (zeroed out) so that `dwarf2json` is not able to find the banner (further analyses cannot be carried out without this information) - we will further investigate this issue
 
 We will check if the problems get resolved and re-evaluate our plugin. Generally, our framework is designed to support more distributions as well and we will try to evaluate the plugin on a wider variety of them.
 
