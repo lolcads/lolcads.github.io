@@ -71,15 +71,14 @@ Well, when investigating the results of the rule [Malicious PowerShell Commandle
 Among others, the rule [Malicious PowerShell Commandlets - ScriptBlock](https://github.com/SigmaHQ/sigma/blob/4319f5807ff4eb8035ecf1a8f86ab3bdc1ab8960/rules/windows/powershell/powershell_script/posh_ps_malicious_commandlets.yml), detects the string "PowerView" inside script blocks. Now, comparing two different runs, run3 with 57 blocks generated 51 alerts and run2 with 76 blocks generated 61 alerts for this rule. So more blocks -> more alerts, this is fine. But, looking deeper into the script blocks and generated alerts, we noticed something at the end of script block 38 of 57 of run 3.
 
 ```
-"script_block_text": "(...)
-        Add-Member Noteproperty 'Comment' $Info.lgrpi1_comment\n
-        $LocalGroup.PSObject.TypeNames.Insert(0, 'PowerVi"
+Add-Member Noteproperty 'Comment' $Info.lgrpi1_comment\n
+$LocalGroup.PSObject.TypeNames.Insert(0, 'PowerVi
 ```
 ___
 And the beginning of script block 39 of 57:
 
 ```
-"script_block_text": "ew.LocalGroup.API')\n                        $LocalGroup\n                    }\n                    # free up the result buffer\n                    $Null = $Netapi32::NetApiBufferFree($PtrInfo) (...)
+ew.LocalGroup.API')\n
 ```
 
 So, in this case the PowerView script was fragmented in such a way, that a string that should have been detected was no longer detected, i.e., "PowerView" was split into "PowerVi" and "ew". (To be fair, script block 38 still raised an alarm because the string "PowerView" occures in it multiple times, but still this example illustrates the problem at hand.)
@@ -94,4 +93,4 @@ We learned that loading the PowerView script multiple times results in fragmenta
 
 **Sidenote:** To add, this behavior might also be leveraged by malicious actors to avoid detection...
 
-The described findings where observed on a Windows 10 host with PowerShell Version 5.1 and PowerShell logging configurations according to the [recommendations by the Australian Cyber Security Centre (ACSC)](https://www.cyber.gov.au/sites/default/files/2023-03/PROTECT%20-%20Windows%20Event%20Logging%20and%20Forwarding%20(October%202021).pdf) which include PowerShell Module and PowerShell Script Block Logging.
+The described findings were observed on a Windows 10 host with PowerShell Version 5.1 and PowerShell logging configurations according to the [recommendations by the Australian Cyber Security Centre (ACSC)](https://www.cyber.gov.au/sites/default/files/2023-03/PROTECT%20-%20Windows%20Event%20Logging%20and%20Forwarding%20(October%202021).pdf) which include PowerShell Module and PowerShell Script Block Logging.
