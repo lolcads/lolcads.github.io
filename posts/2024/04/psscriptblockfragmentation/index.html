@@ -59,7 +59,7 @@ lolcads tech blog
 [Updated: 2024-04-15]
 </span>
 <span class=post-author>:: Louis Hackländer-Jansen</span>
-<span class=post-reading-time>:: 7 min read (1446 words)</span>
+<span class=post-reading-time>:: 7 min read (1431 words)</span>
 </div>
 <span class=post-tags>
 #<a href=https://lolcads.github.io/tags/siem/>SIEM</a>&nbsp;
@@ -344,12 +344,11 @@ Table of Contents
 <p>Well, when investigating the results of the rule <a href=https://github.com/SigmaHQ/sigma/blob/4319f5807ff4eb8035ecf1a8f86ab3bdc1ab8960/rules/windows/powershell/powershell_script/posh_ps_malicious_commandlets.yml>Malicious PowerShell Commandlets - ScriptBlock</a>, a case came true that we thought was extremely unlikely.</p>
 <h2 id=the-case-of-split-powerview>The case of split &ldquo;<em>PowerVi/ew</em>&rdquo;<a href=#the-case-of-split-powerview class=hanchor arialabel=Anchor>&#8983;</a> </h2>
 <p>Among others, the rule <a href=https://github.com/SigmaHQ/sigma/blob/4319f5807ff4eb8035ecf1a8f86ab3bdc1ab8960/rules/windows/powershell/powershell_script/posh_ps_malicious_commandlets.yml>Malicious PowerShell Commandlets - ScriptBlock</a>, detects the string &ldquo;PowerView&rdquo; inside script blocks. Now, comparing two different runs, run3 with 57 blocks generated 51 alerts and run2 with 76 blocks generated 61 alerts for this rule. So more blocks -> more alerts, this is fine. But, looking deeper into the script blocks and generated alerts, we noticed something at the end of script block 38 of 57 of run 3.</p>
-<pre tabindex=0><code>&quot;script_block_text&quot;: &quot;(...)
-        Add-Member Noteproperty 'Comment' $Info.lgrpi1_comment\n
-        $LocalGroup.PSObject.TypeNames.Insert(0, 'PowerVi&quot;
+<pre tabindex=0><code>Add-Member Noteproperty 'Comment' $Info.lgrpi1_comment\n
+$LocalGroup.PSObject.TypeNames.Insert(0, 'PowerVi
 </code></pre><hr>
 <p>And the beginning of script block 39 of 57:</p>
-<pre tabindex=0><code>&quot;script_block_text&quot;: &quot;ew.LocalGroup.API')\n                        $LocalGroup\n                    }\n                    # free up the result buffer\n                    $Null = $Netapi32::NetApiBufferFree($PtrInfo) (...)
+<pre tabindex=0><code>ew.LocalGroup.API')\n
 </code></pre><p>So, in this case the PowerView script was fragmented in such a way, that a string that should have been detected was no longer detected, i.e., &ldquo;PowerView&rdquo; was split into &ldquo;PowerVi&rdquo; and &ldquo;ew&rdquo;. (To be fair, script block 38 still raised an alarm because the string &ldquo;PowerView&rdquo; occures in it multiple times, but still this example illustrates the problem at hand.)</p>
 <h2 id=losing-alerts>Losing alerts<a href=#losing-alerts class=hanchor arialabel=Anchor>&#8983;</a> </h2>
 <p>This shows, that depending on the fragmentation of script blocks, we can indeed lose alerts and miss contents of scripts that should be detected, e.g., by strings split into two parts in two different blocks. But there are other cases: Rules like <a href=https://github.com/SigmaHQ/sigma/blob/49adcf9a00247ed6c3daacba03b589470f6716d0/rules/windows/powershell/powershell_script/posh_ps_invoke_command_remote.yml>Execute Invoke-command on Remote Host</a> detect multiple strings in a single script block (<code>ScriptBlockText|contains|all</code>). Now, when one of those strings is randomly put into a different block, the rule no longer triggers. Although this case should be more likely than the case of &ldquo;search strings split in two&rdquo;, the 10 simulations did not result in such a case since the number of alerts for this specific rule is much smaller (only 5-7 alarms compared to 35-61 for &ldquo;Malicious PowerShell Commandlets - ScriptBlock&rdquo;).</p>
@@ -357,7 +356,7 @@ Table of Contents
 <p>We learned that loading the PowerView script multiple times results in fragmentations of it ranging from 39 to 76 blocks. The alerts raised on these script blocks showed the trend of increasing number of alerts with increasing number of script blocks. Although this behavior adds uncertainty to the generation of alerts, it is of no critical nature. But, another example showed, that the fragmentation of scripts into blocks might result in suspicious/malicious strings being split into two blocks, resulting in a case where the search strings could not be found and the detection is completely missed. Furthermore, when searching for multiple strings in a single block, the fragmentation of scripts might result in these strings being split into two different blocks - where detection is also no longer possible.</p>
 <p><strong>Is there a remedy?</strong> Maybe re-combining script fragments (<a href=https://news.sophos.com/en-us/2022/03/29/reconstructing-powershell-scripts-from-multiple-windows-event-logs/>like this</a>) to run detection mechanisms on the reconstructed scripts?</p>
 <p><strong>Sidenote:</strong> To add, this behavior might also be leveraged by malicious actors to avoid detection&mldr;</p>
-<p>The described findings where observed on a Windows 10 host with PowerShell Version 5.1 and PowerShell logging configurations according to the <a href=https://www.cyber.gov.au/sites/default/files/2023-03/PROTECT%20-%20Windows%20Event%20Logging%20and%20Forwarding%20(October%202021).pdf>recommendations by the Australian Cyber Security Centre (ACSC)</a> which include PowerShell Module and PowerShell Script Block Logging.</p>
+<p>The described findings were observed on a Windows 10 host with PowerShell Version 5.1 and PowerShell logging configurations according to the <a href=https://www.cyber.gov.au/sites/default/files/2023-03/PROTECT%20-%20Windows%20Event%20Logging%20and%20Forwarding%20(October%202021).pdf>recommendations by the Australian Cyber Security Centre (ACSC)</a> which include PowerShell Module and PowerShell Script Block Logging.</p>
 </div></div>
 <div class=pagination>
 <div class=pagination__title>
