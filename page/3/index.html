@@ -54,6 +54,55 @@ lolcads tech blog
 <div class=posts>
 <div class="post on-list">
 <h1 class=post-title>
+<a href=https://lolcads.github.io/posts/2022/06/dirty_pipe_cve_2022_0847/>Exploration of the Dirty Pipe Vulnerability (CVE-2022-0847)</a>
+</h1>
+<div class=post-meta>
+<span class=post-date>
+2022-06-06
+</span>
+<span class=post-author>:: Valentin Obst and Martin Clauß</span>
+</div>
+<span class=post-tags>
+#<a href=https://lolcads.github.io/tags/linux/>Linux</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/kernel/>kernel</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/lpe/>LPE</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/pipe/>pipe</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/splice/>splice</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/page-cache/>page cache</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/debugging/>debugging</a>&nbsp;
+</span>
+<div class=post-content>
+Intro This blog post reflects our exploration of the Dirty Pipe Vulnerability in the Linux kernel. The bug was discovered by Max Kellermann and described here. If you haven’t read the original publication yet, we’d suggest that you read it first (maybe also twice ;)). While Kellermann’s post is a great resource that contains all the relevant information to understand the bug, it assumes some familiarity with the Linux kernel. To fully understand what’s going on we’d like to shed some light on specific kernel internals.
+</div>
+<div>
+<a class="read-more button" href=/posts/2022/06/dirty_pipe_cve_2022_0847/>Read more →</a>
+</div>
+</div>
+<div class="post on-list">
+<h1 class=post-title>
+<a href=https://lolcads.github.io/posts/2022/06/exploiting_cve_2021_43247/>Exploiting CVE-2021-43247</a>
+</h1>
+<div class=post-meta>
+<span class=post-date>
+2022-06-02
+</span>
+<span class=post-author>:: Pascal Beyer</span>
+</div>
+<span class=post-tags>
+#<a href=https://lolcads.github.io/tags/windows/>Windows</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/kernel/>kernel</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/lpe/>LPE</a>&nbsp;
+</span>
+<div class=post-content>
+In this blog post I will go in depth into the inner workings of CVE-2021-43247, which was fixed on the 14th of December 2021. This bug was classified as “Windows TCP/IP Driver Elevation of Privilege Vulnerability”. The vulnerability itself was probably dormant for a long time, but became exploitable when the AF_UNIX address family was first introduced in 2019.
+I will also take this as an excuse to explain in detail, what drivers are, how user space communicates with drivers, what a Local Privilege Escalation (LPE) is and what how we can achieve it in this case.
+</div>
+<div>
+<a class="read-more button" href=/posts/2022/06/exploiting_cve_2021_43247/>Read more →</a>
+</div>
+</div>
+<div class="post on-list">
+<h1 class=post-title>
 <a href=https://lolcads.github.io/posts/2022/03/win7_dotnet_install/>Installing new .NET versions on a Windows 7 VM</a>
 </h1>
 <div class=post-meta>
