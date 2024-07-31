@@ -54,6 +54,81 @@ lolcads tech blog
 <div class=posts>
 <div class="post on-list">
 <h1 class=post-title>
+<a href=https://lolcads.github.io/posts/2024/07/eva_3/>E²VA: Use After Free Write/Execute Module (Part 4)</a>
+</h1>
+<div class=post-meta>
+<span class=post-date>
+2024-07-24
+</span>
+<span class=post-author>:: Pascal Kühnemann</span>
+</div>
+<span class=post-tags>
+#<a href=https://lolcads.github.io/tags/android/>Android</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/binary-exploitation/>Binary Exploitation</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/jni/>JNI</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/eva/>E²VA</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/use-after-free/>Use After Free</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/memory-leak/>Memory Leak</a>&nbsp;
+</span>
+<div class=post-content>
+Exploitation of Use - After - Free Modules In this post we will be discussing how to exploit a Use - After - Free bug in both UseAfterFreeExecModule and UseAfterFreeWriteModule. As the names of the modules suggest, they differ in terms of the impact the bug has. To that end, in UseAfterFreeExecModule we will be able to control a function pointer, whereas in UseAfterFreeWriteModule we are given a Write - What - Where condition.
+</div>
+<div>
+<a class="read-more button" href=/posts/2024/07/eva_3/>Read more →</a>
+</div>
+</div>
+<div class="post on-list">
+<h1 class=post-title>
+<a href=https://lolcads.github.io/posts/2024/07/eva_2/>E²VA: Stack Buffer Overflow Module (Part 3)</a>
+</h1>
+<div class=post-meta>
+<span class=post-date>
+2024-07-23
+</span>
+<span class=post-author>:: Pascal Kühnemann</span>
+</div>
+<span class=post-tags>
+#<a href=https://lolcads.github.io/tags/android/>Android</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/binary-exploitation/>Binary Exploitation</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/jni/>JNI</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/eva/>E²VA</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/buffer-overflow/>Buffer Overflow</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/memory-leak/>Memory Leak</a>&nbsp;
+</span>
+<div class=post-content>
+Exploitation of EasyStackBufferOverflowModule This article describes exploitation of the EasyStackBufferOverflowModule. During exploitation, various Android - specific caveats are discussed.
+Assumptions We will assume that we have successfully grabbed a copy of the .apk file of damnvulnerableapp. Also, we will not discuss how to unpack an .apk file, but rather assume that we have access to libEasyStackBufferOverflowModule.so and the EasyStackBufferOverflowModule class. If it is unclear how to get access to these components when only given an .
+</div>
+<div>
+<a class="read-more button" href=/posts/2024/07/eva_2/>Read more →</a>
+</div>
+</div>
+<div class="post on-list">
+<h1 class=post-title>
+<a href=https://lolcads.github.io/posts/2024/07/eva_1/>E²VA: Android Basics (Part 2)</a>
+</h1>
+<div class=post-meta>
+<span class=post-date>
+2024-07-22
+</span>
+<span class=post-author>:: Pascal Kühnemann</span>
+</div>
+<span class=post-tags>
+#<a href=https://lolcads.github.io/tags/android/>Android</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/binary-exploitation/>Binary Exploitation</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/jni/>JNI</a>&nbsp;
+#<a href=https://lolcads.github.io/tags/eva/>E²VA</a>&nbsp;
+</span>
+<div class=post-content>
+Android Binary Exploitation In this post, we will examine security mechanisms that Android 12 employs in order to make binary exploitation a bit harder. Also, we will discuss how to get to certain information like shared - object files that are necessary for successful exploitation. The latter will be generalized to getting limited source code access to an app given a corresponding .apk file.
+Environment Before diving into details, the technical setup has to be clarified.
+</div>
+<div>
+<a class="read-more button" href=/posts/2024/07/eva_1/>Read more →</a>
+</div>
+</div>
+<div class="post on-list">
+<h1 class=post-title>
 <a href=https://lolcads.github.io/posts/2024/04/psscriptblockfragmentation/><em>PowerView</em> is evil, but <em>PowerVi</em> and <em>ew</em> are legit, right? - Missing signature-based detections due to PowerShell Script Block Logging Fragmentation</a>
 </h1>
 <div class=post-meta>
@@ -102,75 +177,6 @@ Upon receiving a command and control (C2) request, this specimen can execute arb
 </div>
 <div>
 <a class="read-more button" href=/posts/2023/12/bpf_memory_forensics_with_volatility3/>Read more →</a>
-</div>
-</div>
-<div class="post on-list">
-<h1 class=post-title>
-<a href=https://lolcads.github.io/posts/2022/11/diving_into_the_art_of_userspace_exploitation_under_android/>Diving into the art of userspace exploitation under Android - Introducing E²VA (Part 1)</a>
-</h1>
-<div class=post-meta>
-<span class=post-date>
-2022-11-21
-</span>
-<span class=post-author>:: Pascal Kühnemann, Daniel Baier</span>
-</div>
-<span class=post-tags>
-#<a href=https://lolcads.github.io/tags/android/>Android</a>&nbsp;
-#<a href=https://lolcads.github.io/tags/binary-exploitation/>Binary Exploitation</a>&nbsp;
-#<a href=https://lolcads.github.io/tags/jni/>JNI</a>&nbsp;
-#<a href=https://lolcads.github.io/tags/eva/>E²VA</a>&nbsp;
-</span>
-<div class=post-content>
-Investigating Binary Exploitation for JNI on Android This post aims to be an introduction into a blog series about binary exploitation on Android. It tries to describe how the environment that runs vulnerable modules is set up and how the damnvulnerableapp supports the process of binary exploitation on Android.
-Warning The following app is intended to be vulnerable to specific attacks and can result in arbitrary code execution in the context of the app.
-</div>
-<div>
-<a class="read-more button" href=/posts/2022/11/diving_into_the_art_of_userspace_exploitation_under_android/>Read more →</a>
-</div>
-</div>
-<div class="post on-list">
-<h1 class=post-title>
-<a href=https://lolcads.github.io/posts/2022/08/fritap/>friTap - Decrypting TLS on the fly</a>
-</h1>
-<div class=post-meta>
-<span class=post-date>
-2022-08-12
-</span>
-<span class=post-author>:: Daniel Baier and Francois Egner</span>
-</div>
-<span class=post-tags>
-#<a href=https://lolcads.github.io/tags/frida/>frida</a>&nbsp;
-#<a href=https://lolcads.github.io/tags/network/>network</a>&nbsp;
-#<a href=https://lolcads.github.io/tags/tls/>TLS</a>&nbsp;
-#<a href=https://lolcads.github.io/tags/tls-decryption/>TLS decryption</a>&nbsp;
-</span>
-<div class=post-content>
-Encryption - a curse and a blessing at the same time Digital communication in today’s world has a particularly high status in our society. Financial transactions are conducted via online banking, private communication is increasingly limited to digital messenger services, and even health data is experiencing a shift to digital form. Due to the growth of such sensitive digital data, the need for secure transmission of such data has become increasingly important over the past decades.
-</div>
-<div>
-<a class="read-more button" href=/posts/2022/08/fritap/>Read more →</a>
-</div>
-</div>
-<div class="post on-list">
-<h1 class=post-title>
-<a href=https://lolcads.github.io/posts/2022/07/make_frida_great_again/>Make Frida Great Again</a>
-</h1>
-<div class=post-meta>
-<span class=post-date>
-2022-07-28
-</span>
-<span class=post-author>:: Pascal Kühnemann</span>
-</div>
-<span class=post-tags>
-#<a href=https://lolcads.github.io/tags/frida/>Frida</a>&nbsp;
-#<a href=https://lolcads.github.io/tags/elf/>ELF</a>&nbsp;
-#<a href=https://lolcads.github.io/tags/code-injection/>Code Injection</a>&nbsp;
-</span>
-<div class=post-content>
-Make Frida Great Again In order to analyse binaries on e.g. Android systems, one is offered a plethora of tools to use to figure out what a binary is doing, whether it is malicious or just buggy. One way to figure out the behaviour of a binary is to utilise the strength of dynamic analysis. Under linux, i.e. Android in particular, Frida is a tool that is used for automated instrumentation of binaries, to inspect memory, function calls etc.
-</div>
-<div>
-<a class="read-more button" href=/posts/2022/07/make_frida_great_again/>Read more →</a>
 </div>
 </div>
 <div class=pagination>

