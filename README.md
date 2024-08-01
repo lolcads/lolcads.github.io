@@ -15,7 +15,7 @@ $ hugo server
 
 Choose a title/filename (without spaces or any other strange character), for example, "awesome_new_post":
 
-```bash
+```shell
 $ ./new_post.sh awesome_new_post
 /home/user/path/to/lolcads.github.io/content/posts/2022/02/awesome_new_post.md created
 info: you can use static/2022/02 for images
@@ -76,3 +76,9 @@ Check out the existing pages under `content/` for additional settings (table of 
 After you pushed you changes to GitHub the site will be rendered automatically with a GitHub Action (more info here: https://gohugo.io/hosting-and-deployment/hosting-on-github/ and https://github.com/peaceiris/actions-hugo)
 
 The rendered files will be published to the `gh-pages` branch and made available here: https://lolcads.github.io/
+
+If you want to check if the build works locally, use the following command and go to http://127.0.0.1:8000:
+
+```shell
+$ ./local_build_and_serve.sh
+```
