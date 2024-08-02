@@ -51,3 +51,6 @@ theme = "tailwind"
   category = "categories"
   tag = "tags"
   series = "series"
+
+[markup]
+  _merge = "deep"
