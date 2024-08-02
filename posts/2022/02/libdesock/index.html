@@ -50,8 +50,7 @@ fd that actually refers to a network connection. If you pass them an fd that
 refers to a file the kernel will complain.
 Thus we need more complicated methods.</p><p>At the time of writing this, there exists only one popular desocketing solution: <a href=https://github.com/zardus/preeny target=_blank rel=noopener>preeny</a>
 .
-preeny creates a socketpair <code>(a,b)</code> and spawns two threads <code>t1</code> and
-<code>t2</code> in every call to <code>socket()</code>.</p><ul><li>Thread <code>t1</code> forwards all data from stdin to <code>a</code></li><li>Thread <code>t2</code> forwards all data from <code>a</code> to stdout</li><li>In <code>socket()</code> preeny returns <code>b</code></li><li>When AFL writes input to stdin, thread <code>t1</code> forwards that data to <code>a</code></li><li>Writing to <code>a</code> means that the data will become available in <code>b</code> and the
+preeny creates a socketpair <code>(a,b)</code> and spawns two threads <code>t1</code> and<code>t2</code> in every call to <code>socket()</code>.</p><ul><li>Thread <code>t1</code> forwards all data from stdin to <code>a</code></li><li>Thread <code>t2</code> forwards all data from <code>a</code> to stdout</li><li>In <code>socket()</code> preeny returns <code>b</code></li><li>When AFL writes input to stdin, thread <code>t1</code> forwards that data to <code>a</code></li><li>Writing to <code>a</code> means that the data will become available in <code>b</code> and the
 application can read the request from <code>b</code></li><li>The application writes a response back to <code>b</code>, making the data available
 in socket <code>a</code> where <code>t2</code> forwards it to stdout.</li></ul><p><div class=not-prose><figure><img src=/2022/02/preeny.png alt loading=lazy></figure></div></p><p>Unfortunately this design makes preeny unsuitable for fuzzing:</p><ol><li>Spawning threads and joining them introduces additional overhead.</li><li>Each thread realizes busy waiting by calling <code>poll()</code> every 15ms</li><li>Preeny still relies on a lot of kernel interaction. I/O multiplexing (select, poll, epoll)
 is left completely to the kernel.</li><li>The threads may introduce additional instability.<br>Normally you want to disable threads when fuzzing with AFL.</li><li>It can handle only single-threaded applications but most of the servers
@@ -67,108 +66,107 @@ and sometimes custom allocators that don&rsquo;t work with ASAN.
 They also run in an endless loop and have a lot of disk I/O (pidfiles, logfiles, temporary files).
 Setting these targets up for fuzzing means to reduce the complexity of the applications.
 The following example demonstrates the modifications necessary to fuzz <a href=https://security.appspot.com/vsftpd.html target=_blank rel=noopener>vsftpd</a>
-, a popular FTP server on Linux.</p><h2 id=fuzzing-vsftpd>Fuzzing vsftpd</h2><h3 id=getting-the-source>Getting the source</h3><p>Download version 3.0.5 of vsftpd:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-sh data-lang=sh><span style=display:flex><span>wget https://security.appspot.com/downloads/vsftpd-3.0.5.tar.gz
-</span></span><span style=display:flex><span>tar -xf vsftpd-3.0.5.tar.gz
-</span></span><span style=display:flex><span>cd vsftpd-3.0.5
+, a popular FTP server on Linux.</p><h2 id=fuzzing-vsftpd>Fuzzing vsftpd</h2><h3 id=getting-the-source>Getting the source</h3><p>Download version 3.0.5 of vsftpd:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-sh data-lang=sh><span class=line><span class=cl>wget https://security.appspot.com/downloads/vsftpd-3.0.5.tar.gz
+</span></span><span class=line><span class=cl>tar -xf vsftpd-3.0.5.tar.gz
+</span></span><span class=line><span class=cl><span class=nb>cd</span> vsftpd-3.0.5
 </span></span></code></pre></div><h3 id=patching-the-source>Patching the source</h3><p>vsftpd creates a new child process for each connection. We prohibit that
-by commenting out the code that does the fork in <code>standalone.c</code>:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-diff data-lang=diff><span style=display:flex><span><span style=color:#75715e>@@ -153,6 +153,7 @@ vsf_standalone_main(void)
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span>     child_info.num_this_ip = 0;
-</span></span><span style=display:flex><span>     p_raw_addr = vsf_sysutil_sockaddr_get_raw_addr(p_accept_addr);
-</span></span><span style=display:flex><span>     child_info.num_this_ip = handle_ip_count(p_raw_addr);
-</span></span><span style=display:flex><span><span style=color:#a6e22e>+    /*
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span>     if (tunable_isolate)
-</span></span><span style=display:flex><span>     {
-</span></span><span style=display:flex><span>       if (tunable_http_enable &amp;&amp; tunable_isolate_network)
-</span></span><span style=display:flex><span><span style=color:#75715e>@@ -168,6 +169,8 @@ vsf_standalone_main(void)
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span>     {
-</span></span><span style=display:flex><span>       new_child = vsf_sysutil_fork_failok();
-</span></span><span style=display:flex><span>     }
-</span></span><span style=display:flex><span><span style=color:#a6e22e>+    */
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+    new_child = 0;
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span>     if (new_child != 0)
-</span></span><span style=display:flex><span>     {
-</span></span><span style=display:flex><span>       /* Parent context */
+by commenting out the code that does the fork in <code>standalone.c</code>:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-diff data-lang=diff><span class=line><span class=cl><span class=gu>@@ -153,6 +153,7 @@ vsf_standalone_main(void)
+</span></span></span><span class=line><span class=cl><span class=gu></span>     child_info.num_this_ip = 0;
+</span></span><span class=line><span class=cl>     p_raw_addr = vsf_sysutil_sockaddr_get_raw_addr(p_accept_addr);
+</span></span><span class=line><span class=cl>     child_info.num_this_ip = handle_ip_count(p_raw_addr);
+</span></span><span class=line><span class=cl><span class=gi>+    /*
+</span></span></span><span class=line><span class=cl><span class=gi></span>     if (tunable_isolate)
+</span></span><span class=line><span class=cl>     {
+</span></span><span class=line><span class=cl>       if (tunable_http_enable &amp;&amp; tunable_isolate_network)
+</span></span><span class=line><span class=cl><span class=gu>@@ -168,6 +169,8 @@ vsf_standalone_main(void)
+</span></span></span><span class=line><span class=cl><span class=gu></span>     {
+</span></span><span class=line><span class=cl>       new_child = vsf_sysutil_fork_failok();
+</span></span><span class=line><span class=cl>     }
+</span></span><span class=line><span class=cl><span class=gi>+    */
+</span></span></span><span class=line><span class=cl><span class=gi>+    new_child = 0;
+</span></span></span><span class=line><span class=cl><span class=gi></span>     if (new_child != 0)
+</span></span><span class=line><span class=cl>     {
+</span></span><span class=line><span class=cl>       /* Parent context */
 </span></span></code></pre></div><p>vsftpd duplicates the FTP command socket to stdin, stdout and stderr.
-This obviously interfers with AFL so we disable that in <code>defs.h</code> &mldr;</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-diff data-lang=diff><span style=display:flex><span><span style=color:#75715e>@@ -3,7 +3,7 @@
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span> 
-</span></span><span style=display:flex><span> #define VSFTP_DEFAULT_CONFIG    &#34;/etc/vsftpd.conf&#34;
-</span></span><span style=display:flex><span> 
-</span></span><span style=display:flex><span><span style=color:#f92672>-#define VSFTP_COMMAND_FD        0
-</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+#define VSFTP_COMMAND_FD        29
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span> 
-</span></span><span style=display:flex><span> #define VSFTP_PASSWORD_MAX      128
-</span></span><span style=display:flex><span> #define VSFTP_USERNAME_MAX      128
-</span></span></code></pre></div><p>&mldr; and in <code>standalone.c</code></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-diff data-lang=diff><span style=display:flex><span><span style=color:#75715e>@@ -205,9 +205,7 @@ static void
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span> prepare_child(int new_client_sock)
-</span></span><span style=display:flex><span> {
-</span></span><span style=display:flex><span>   /* We must satisfy the contract: command socket on fd 0, 1, 2 */
-</span></span><span style=display:flex><span><span style=color:#f92672>-  vsf_sysutil_dupfd2(new_client_sock, 0);
-</span></span></span><span style=display:flex><span><span style=color:#f92672>-  vsf_sysutil_dupfd2(new_client_sock, 1);
-</span></span></span><span style=display:flex><span><span style=color:#f92672>-  vsf_sysutil_dupfd2(new_client_sock, 2);
-</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+  vsf_sysutil_dupfd2(new_client_sock, VSFTP_COMMAND_FD);
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span>   if (new_client_sock &gt; 2)
-</span></span><span style=display:flex><span>   {
-</span></span><span style=display:flex><span>     vsf_sysutil_close(new_client_sock);
+This obviously interfers with AFL so we disable that in <code>defs.h</code> &mldr;</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-diff data-lang=diff><span class=line><span class=cl><span class=gu>@@ -3,7 +3,7 @@
+</span></span></span><span class=line><span class=cl><span class=gu></span> 
+</span></span><span class=line><span class=cl> #define VSFTP_DEFAULT_CONFIG    &#34;/etc/vsftpd.conf&#34;
+</span></span><span class=line><span class=cl> 
+</span></span><span class=line><span class=cl><span class=gd>-#define VSFTP_COMMAND_FD        0
+</span></span></span><span class=line><span class=cl><span class=gd></span><span class=gi>+#define VSFTP_COMMAND_FD        29
+</span></span></span><span class=line><span class=cl><span class=gi></span> 
+</span></span><span class=line><span class=cl> #define VSFTP_PASSWORD_MAX      128
+</span></span><span class=line><span class=cl> #define VSFTP_USERNAME_MAX      128
+</span></span></code></pre></div><p>&mldr; and in <code>standalone.c</code></p><div class=highlight><pre tabindex=0 class=chroma><code class=language-diff data-lang=diff><span class=line><span class=cl><span class=gu>@@ -205,9 +205,7 @@ static void
+</span></span></span><span class=line><span class=cl><span class=gu></span> prepare_child(int new_client_sock)
+</span></span><span class=line><span class=cl> {
+</span></span><span class=line><span class=cl>   /* We must satisfy the contract: command socket on fd 0, 1, 2 */
+</span></span><span class=line><span class=cl><span class=gd>-  vsf_sysutil_dupfd2(new_client_sock, 0);
+</span></span></span><span class=line><span class=cl><span class=gd>-  vsf_sysutil_dupfd2(new_client_sock, 1);
+</span></span></span><span class=line><span class=cl><span class=gd>-  vsf_sysutil_dupfd2(new_client_sock, 2);
+</span></span></span><span class=line><span class=cl><span class=gd></span><span class=gi>+  vsf_sysutil_dupfd2(new_client_sock, VSFTP_COMMAND_FD);
+</span></span></span><span class=line><span class=cl><span class=gi></span>   if (new_client_sock &gt; 2)
+</span></span><span class=line><span class=cl>   {
+</span></span><span class=line><span class=cl>     vsf_sysutil_close(new_client_sock);
 </span></span></code></pre></div><p>Next, vsftpd enforces a custom memory limit that interfers with ASAN.
-We disable the memory limit in <code>sysutil.c</code></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-diff data-lang=diff><span style=display:flex><span><span style=color:#75715e>@@ -2793,6 +2793,7 @@ void
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span> vsf_sysutil_set_address_space_limit(unsigned long bytes)
-</span></span><span style=display:flex><span> {
-</span></span><span style=display:flex><span>   /* Unfortunately, OpenBSD is missing RLIMIT_AS. */
-</span></span><span style=display:flex><span><span style=color:#a6e22e>+  return;
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span> #ifdef RLIMIT_AS
-</span></span><span style=display:flex><span>   int ret;
-</span></span><span style=display:flex><span>   struct rlimit rlim;
-</span></span></code></pre></div><p>Then we add a forkserver to vsftpd in <code>prelogin.c</code></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-diff data-lang=diff><span style=display:flex><span><span style=color:#75715e>@@ -59,6 +59,7 @@ init_connection(struct vsf_session* p_sess)
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span>   {
-</span></span><span style=display:flex><span>     emit_greeting(p_sess);
-</span></span><span style=display:flex><span>   }
-</span></span><span style=display:flex><span><span style=color:#a6e22e>+  __AFL_INIT();
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span>   parse_username_password(p_sess);
-</span></span><span style=display:flex><span> }
+We disable the memory limit in <code>sysutil.c</code></p><div class=highlight><pre tabindex=0 class=chroma><code class=language-diff data-lang=diff><span class=line><span class=cl><span class=gu>@@ -2793,6 +2793,7 @@ void
+</span></span></span><span class=line><span class=cl><span class=gu></span> vsf_sysutil_set_address_space_limit(unsigned long bytes)
+</span></span><span class=line><span class=cl> {
+</span></span><span class=line><span class=cl>   /* Unfortunately, OpenBSD is missing RLIMIT_AS. */
+</span></span><span class=line><span class=cl><span class=gi>+  return;
+</span></span></span><span class=line><span class=cl><span class=gi></span> #ifdef RLIMIT_AS
+</span></span><span class=line><span class=cl>   int ret;
+</span></span><span class=line><span class=cl>   struct rlimit rlim;
+</span></span></code></pre></div><p>Then we add a forkserver to vsftpd in <code>prelogin.c</code></p><div class=highlight><pre tabindex=0 class=chroma><code class=language-diff data-lang=diff><span class=line><span class=cl><span class=gu>@@ -59,6 +59,7 @@ init_connection(struct vsf_session* p_sess)
+</span></span></span><span class=line><span class=cl><span class=gu></span>   {
+</span></span><span class=line><span class=cl>     emit_greeting(p_sess);
+</span></span><span class=line><span class=cl>   }
+</span></span><span class=line><span class=cl><span class=gi>+  __AFL_INIT();
+</span></span></span><span class=line><span class=cl><span class=gi></span>   parse_username_password(p_sess);
+</span></span><span class=line><span class=cl> }
 </span></span></code></pre></div><p>vsftpd registers a <code>SIGCHLD</code> handler that interfers with the forkserver
-so we have to disable that too in <code>standalone.c</code></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-diff data-lang=diff><span style=display:flex><span><span style=color:#75715e>@@ -74,7 +74,7 @@ vsf_standalone_main(void)
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span>   {
-</span></span><span style=display:flex><span>     vsf_sysutil_setproctitle(&#34;LISTENER&#34;);
-</span></span><span style=display:flex><span>   }
-</span></span><span style=display:flex><span><span style=color:#f92672>-  vsf_sysutil_install_sighandler(kVSFSysUtilSigCHLD, handle_sigchld, 0, 1);
-</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+  //vsf_sysutil_install_sighandler(kVSFSysUtilSigCHLD, handle_sigchld, 0, 1);
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span>   vsf_sysutil_install_sighandler(kVSFSysUtilSigHUP, handle_sighup, 0, 1);
-</span></span><span style=display:flex><span>   if (tunable_listen)
-</span></span><span style=display:flex><span>   {
+so we have to disable that too in <code>standalone.c</code></p><div class=highlight><pre tabindex=0 class=chroma><code class=language-diff data-lang=diff><span class=line><span class=cl><span class=gu>@@ -74,7 +74,7 @@ vsf_standalone_main(void)
+</span></span></span><span class=line><span class=cl><span class=gu></span>   {
+</span></span><span class=line><span class=cl>     vsf_sysutil_setproctitle(&#34;LISTENER&#34;);
+</span></span><span class=line><span class=cl>   }
+</span></span><span class=line><span class=cl><span class=gd>-  vsf_sysutil_install_sighandler(kVSFSysUtilSigCHLD, handle_sigchld, 0, 1);
+</span></span></span><span class=line><span class=cl><span class=gd></span><span class=gi>+  //vsf_sysutil_install_sighandler(kVSFSysUtilSigCHLD, handle_sigchld, 0, 1);
+</span></span></span><span class=line><span class=cl><span class=gi></span>   vsf_sysutil_install_sighandler(kVSFSysUtilSigHUP, handle_sighup, 0, 1);
+</span></span><span class=line><span class=cl>   if (tunable_listen)
+</span></span><span class=line><span class=cl>   {
 </span></span></code></pre></div><p>Last but not least we disable the <code>bug()</code> function in <code>utility.c</code>. This function does a failing <code>fcntl()</code>
 on an fd returned by the desocketing library since the fd is not a real socket. vsftpd handles the <code>fcntl()</code> failure by calling <code>bug()</code> again
-leading to an infinite loop.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-diff data-lang=diff><span style=display:flex><span><span style=color:#75715e>@@ -40,6 +40,7 @@ die2(const char* p_text1, const char* p_text2)
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span> void
-</span></span><span style=display:flex><span> bug(const char* p_text)
-</span></span><span style=display:flex><span> {
-</span></span><span style=display:flex><span><span style=color:#a6e22e>+  return;
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span>   /* Rats. Try and write the reason to the network for diagnostics */
-</span></span><span style=display:flex><span>   vsf_sysutil_activate_noblock(VSFTP_COMMAND_FD);
-</span></span><span style=display:flex><span>   (void) vsf_sysutil_write_loop(VSFTP_COMMAND_FD, &#34;500 OOPS: &#34;, 10);
-</span></span></code></pre></div><h3 id=build-configuration>Build configuration</h3><p>In the <code>Makefile</code> replace:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-diff data-lang=diff><span style=display:flex><span><span style=color:#75715e>@@ -1,16 +1,16 @@
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span> # Makefile for systems with GNU tools
-</span></span><span style=display:flex><span><span style=color:#f92672>-CC 	=	gcc
-</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+CC 	=	afl-clang-fast
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span> INSTALL	=	install
-</span></span><span style=display:flex><span> IFLAGS  = -idirafter dummyinc
-</span></span><span style=display:flex><span> #CFLAGS = -g
-</span></span><span style=display:flex><span><span style=color:#f92672>-CFLAGS	=	-O2 -fPIE -fstack-protector --param=ssp-buffer-size=4 \
-</span></span></span><span style=display:flex><span><span style=color:#f92672>-	-Wall -W -Wshadow -Werror -Wformat-security \
-</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+CFLAGS	=	-fsanitize=address -g -Og -fPIE -fstack-protector \
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+	-Wall -W -Wshadow -Wformat-security \
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span>     -D_FORTIFY_SOURCE=2 \
-</span></span><span style=display:flex><span>     #-pedantic -Wconversion
-</span></span><span style=display:flex><span> 
-</span></span><span style=display:flex><span> LIBS	=	`./vsf_findlibs.sh`
-</span></span><span style=display:flex><span><span style=color:#f92672>-LINK	=	-Wl,-s
-</span></span></span><span style=display:flex><span><span style=color:#f92672>-LDFLAGS	=	-fPIE -pie -Wl,-z,relro -Wl,-z,now
-</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+LINK	=	
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+LDFLAGS	=	-fPIE -pie -Wl,-z,relro -Wl,-z,now -fsanitize=address
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span> 
-</span></span><span style=display:flex><span> OBJS	=	main.o utility.o prelogin.o ftpcmdio.o postlogin.o privsock.o \
-</span></span><span style=display:flex><span>         tunables.o ftpdataio.o secbuf.o ls.o \
-</span></span></code></pre></div><h3 id=runtime-configuration>Runtime configuration</h3><p>Like most other servers, vsftpd needs a config file. Create
-<code>fuzz.conf</code> with the following contents:</p><pre tabindex=0><code>listen=YES
+leading to an infinite loop.</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-diff data-lang=diff><span class=line><span class=cl><span class=gu>@@ -40,6 +40,7 @@ die2(const char* p_text1, const char* p_text2)
+</span></span></span><span class=line><span class=cl><span class=gu></span> void
+</span></span><span class=line><span class=cl> bug(const char* p_text)
+</span></span><span class=line><span class=cl> {
+</span></span><span class=line><span class=cl><span class=gi>+  return;
+</span></span></span><span class=line><span class=cl><span class=gi></span>   /* Rats. Try and write the reason to the network for diagnostics */
+</span></span><span class=line><span class=cl>   vsf_sysutil_activate_noblock(VSFTP_COMMAND_FD);
+</span></span><span class=line><span class=cl>   (void) vsf_sysutil_write_loop(VSFTP_COMMAND_FD, &#34;500 OOPS: &#34;, 10);
+</span></span></code></pre></div><h3 id=build-configuration>Build configuration</h3><p>In the <code>Makefile</code> replace:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-diff data-lang=diff><span class=line><span class=cl><span class=gu>@@ -1,16 +1,16 @@
+</span></span></span><span class=line><span class=cl><span class=gu></span> # Makefile for systems with GNU tools
+</span></span><span class=line><span class=cl><span class=gd>-CC 	=	gcc
+</span></span></span><span class=line><span class=cl><span class=gd></span><span class=gi>+CC 	=	afl-clang-fast
+</span></span></span><span class=line><span class=cl><span class=gi></span> INSTALL	=	install
+</span></span><span class=line><span class=cl> IFLAGS  = -idirafter dummyinc
+</span></span><span class=line><span class=cl> #CFLAGS = -g
+</span></span><span class=line><span class=cl><span class=gd>-CFLAGS	=	-O2 -fPIE -fstack-protector --param=ssp-buffer-size=4 \
+</span></span></span><span class=line><span class=cl><span class=gd>-	-Wall -W -Wshadow -Werror -Wformat-security \
+</span></span></span><span class=line><span class=cl><span class=gd></span><span class=gi>+CFLAGS	=	-fsanitize=address -g -Og -fPIE -fstack-protector \
+</span></span></span><span class=line><span class=cl><span class=gi>+	-Wall -W -Wshadow -Wformat-security \
+</span></span></span><span class=line><span class=cl><span class=gi></span>     -D_FORTIFY_SOURCE=2 \
+</span></span><span class=line><span class=cl>     #-pedantic -Wconversion
+</span></span><span class=line><span class=cl> 
+</span></span><span class=line><span class=cl> LIBS	=	`./vsf_findlibs.sh`
+</span></span><span class=line><span class=cl><span class=gd>-LINK	=	-Wl,-s
+</span></span></span><span class=line><span class=cl><span class=gd>-LDFLAGS	=	-fPIE -pie -Wl,-z,relro -Wl,-z,now
+</span></span></span><span class=line><span class=cl><span class=gd></span><span class=gi>+LINK	=	
+</span></span></span><span class=line><span class=cl><span class=gi>+LDFLAGS	=	-fPIE -pie -Wl,-z,relro -Wl,-z,now -fsanitize=address
+</span></span></span><span class=line><span class=cl><span class=gi></span> 
+</span></span><span class=line><span class=cl> OBJS	=	main.o utility.o prelogin.o ftpcmdio.o postlogin.o privsock.o \
+</span></span><span class=line><span class=cl>         tunables.o ftpdataio.o secbuf.o ls.o \
+</span></span></code></pre></div><h3 id=runtime-configuration>Runtime configuration</h3><p>Like most other servers, vsftpd needs a config file. Create<code>fuzz.conf</code> with the following contents:</p><pre tabindex=0><code>listen=YES
 seccomp_sandbox=NO
 one_process_model=YES
 
@@ -188,7 +186,7 @@ pasv_address=127.0.0.1
 write_enable=NO
 download_enable=NO
 </code></pre><h3 id=start-fuzzing>Start fuzzing</h3><p>To use the desocketing library with AFL we need to set the <code>AFL_PRELOAD</code>
-variable.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-sh data-lang=sh><span style=display:flex><span>export AFL_PRELOAD<span style=color:#f92672>=</span>libdesock.so
-</span></span><span style=display:flex><span>afl-fuzz -i corpus -o findings -m none -- ./vsftpd fuzz.conf
+variable.</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-sh data-lang=sh><span class=line><span class=cl><span class=nb>export</span> <span class=nv>AFL_PRELOAD</span><span class=o>=</span>libdesock.so
+</span></span><span class=line><span class=cl>afl-fuzz -i corpus -o findings -m none -- ./vsftpd fuzz.conf
 </span></span></code></pre></div><p><div class=not-prose><figure><img src=/2022/02/afl.svg alt loading=lazy></figure></div></p><p>Now it&rsquo;s only a matter of high-quality custom mutators and time to find some bugs.</p><p>libdesock can be downloaded here: <a href=https://github.com/fkie-cad/libdesock target=_blank rel=noopener>https://github.com/fkie-cad/libdesock</a></p></article></div></div></div></main><footer class="flex flex-none justify-center"><section class="flex flex-col md:flex-row mx-2 md:mx-0 gap-2 md:gap-0 justify-between w-full max-w-4xl lg:max-w-5xl py-6 text-slate-500 dark:text-slate-300"><div class="flex flex-row"></div><div class=grow></div><div class="flex flex-row"><i class="h-6 w-6 flex-none"><svg class="icon icon-tabler icon-tabler-copyright" viewBox="0 0 24 24" stroke-width="2" stroke="currentcolor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1018 0A9 9 0 103 12"/><path d="M14 9.75a3.016 3.016.0 00-4.163.173 2.993 2.993.0 000 4.154A3.016 3.016.0 0014 14.25"/></svg>
 </i>2022 - 2024 lolcads</div><div class="flex flex-row"><span class="ml-0 pl-0 md:ml-2 md:pl-2 border-l-0 md:border-l border-slate-300 dark:border-slate-400">Powered by <a href=https://gohugo.io target=_blank rel=noopener class=underline>Hugo</a> <span class=text-red-600>&#9829;</span> <a href=https://github.com/tomowang/hugo-theme-tailwind target=_blank rel=noopener class=underline>Tailwind</a></span></div></section></footer><script src=/main.min.c6372b6836971865bd94bfde974748aca8415824a2facab6ccd66a87384bfacb.js></script><div class="hidden top-1 right-1" id=code-copy><i class="h-6 w-6 block"><svg class="icon icon-tabler icon-tabler-copy" viewBox="0 0 24 24" stroke-width="2" stroke="currentcolor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 7m0 2.667A2.667 2.667.0 019.667 7h8.666A2.667 2.667.0 0121 9.667v8.666A2.667 2.667.0 0118.333 21H9.667A2.667 2.667.0 017 18.333z"/><path d="M4.012 16.737A2.005 2.005.0 013 15V5c0-1.1.9-2 2-2h10c.75.0 1.158.385 1.5 1"/></svg></i></div><div class="hidden top-1 right-1" id=code-copy-done><i class="h-6 w-6 block"><svg class="icon icon-tabler icon-tabler-check" viewBox="0 0 24 24" stroke-width="2" stroke="currentcolor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5L20 7"/></svg></i></div><script src=/code-copy.min.e7b2a74adef1ed474c335c8bd5e7832b2316b8842b0f9184d65286c5bd64f51a.js></script></body></html>
