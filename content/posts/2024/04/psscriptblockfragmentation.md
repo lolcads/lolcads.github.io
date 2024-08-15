@@ -13,6 +13,12 @@ readingTime = true
 
 # *PowerView* is evil, but *PowerVi* and *ew* are legit, right? - Missing signature-based detections due to PowerShell Script Block Logging Fragmentation
 
+## Update [15/08/2024]:
+In a [short discussion on X](https://x.com/nas_bench/status/1806253324456403316) the source code of the PowerShell Script Block Fragmentation was [linked](https://github.com/PowerShell/PowerShell/blob/7ec8e4ed8f47e81e70de5353500f8a01d5fe396c/src/System.Management.Automation/engine/runtime/CompiledScriptBlock.cs#L1451-L1454).
+Looking at the comment in the code, it becomes clear that the size of a script block fragment is intentionally set to a random value in order to deny attackers the easy possibility to split their scripts as they wish.
+If a script block is larger than 20000 (Unicode) characters, it is split into fragments with sizes 10000 plus a random value between 0 and 10000 - resulting in script block sizes from 10000 to 20000 characters.
+Further research is needed to answer the question if and how the fragmentation of PowerShell script blocks can still be exploited.
+
 **TL;DR:** Sigma rules and similar signature-based threat detection measures may miss malicious PowerShell scripts due to unpredictable fragmentation of script block logs.
 
 ## Introduction
