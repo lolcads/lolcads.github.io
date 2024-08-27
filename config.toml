@@ -16,6 +16,12 @@ theme = "tailwind"
   keywords = "lolcads, exploitation, reverse engineering, tech, low-level, analysis, experiments, Linux, Android, Windows"
   subtitle = ""
 
+  showAuthor = true
+
+  [params.author]
+    name = "lolcads"
+    email = "lolcads@posteo.net"
+
   [params.header]
     logo = "logo.png"
 
