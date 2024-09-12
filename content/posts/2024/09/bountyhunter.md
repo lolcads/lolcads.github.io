@@ -6,7 +6,7 @@ authorTwitter: "L015H4CK" #do not include @
 image: "/2024/09/bountyhunter_logo_v1_title.png"
 tags: ["Adversary Emulation", "Caldera", "Cybersecurity"]
 keywords: ["Adversary Emulation", "Caldera"]
-description: "This blog post introduces the Bounty Hunter - a novel Caldera plugin for intelligent cyber adversary emulation. Its main contribution is the emulation of complete, realistic cyber attack chains. The Plugin is avaible on [**GitHub**](https://github.com/fkie-cad/bountyhunter)."
+description: "This blog post introduces the Bounty Hunter - a novel Caldera plugin for intelligent cyber adversary emulation. Its main contribution is the emulation of complete, realistic cyber attack chains. The Plugin is available on [**GitHub**](https://github.com/fkie-cad/bountyhunter)."
 showFullContent: false
 draft: false
 ---
@@ -62,13 +62,13 @@ As a result of this step, a new elevated agent was started (`ebdwxy`) and the fi
 | *Example operation to demonstrate Initial Access and Privilege Escalation with the Bounty Hunter and a demo adversary profile. Note how three different agents are used during the different phases.* |
 
 
-### Scenairo #2 - Emulating an APT29 Campaign
+### Scenario #2 - Emulating an APT29 Campaign
 The level of complexity the Bounty Hunter supports was tested using the APT29 Day2 data from the [adversary emulation library](https://github.com/center-for-threat-informed-defense/adversary_emulation_library/) of the Center for Threat Informed Defense.
 The resulting attack chain including fact-links between steps is shown in the figure below.
 The test showed that the Bounty Hunter is able to initially access a Windows Workstation using SSH brute force, elevate its privileges automatically using a Windows UAC Bypass, and finally compromise the whole domain using a Kerberos Golden Ticket Attack.
 
 To achieve its goal, the Bounty Hunter was only provided with a high reward of the final ability that executes a command using the Golden Ticket and the name of the interface to scan initially.
-All other information needed for the successful execution, including the domain name, domain admin credentials, SID values, and NTLM hahses, were collected autonomously.
+All other information needed for the successful execution, including the domain name, domain admin credentials, SID values, and NTLM hashes, were collected autonomously.
 
 |                                                                                              ![](/2024/09/bountyhunter_scenario2.png)                                                                                               |
 |:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------:|
