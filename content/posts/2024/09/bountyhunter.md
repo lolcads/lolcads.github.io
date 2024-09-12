@@ -1,9 +1,9 @@
 ---
 title: "Adversary Emulation is a Complicated Profession - Intelligent Cyber Adversary Emulation with the Bounty Hunter"
-date: 2024-08-15T12:49:24+02:00
+date: 2024-09-12T10:00:00+02:00
 author: "Louis Hackländer-Jansen"
 authorTwitter: "L015H4CK" #do not include @
-image: "/2024/08/bountyhunter_logo_v1_title.png"
+image: "/2024/09/bountyhunter_logo_v1_title.png"
 tags: ["Adversary Emulation", "Caldera", "Cybersecurity"]
 keywords: ["Adversary Emulation", "Caldera"]
 description: "This blog post introduces the Bounty Hunter - a novel Caldera plugin for intelligent cyber adversary emulation. Its main contribution is the emulation of complete, realistic cyber attack chains. The Plugin is avaible on [**GitHub**](https://github.com/fkie-cad/bountyhunter)."
@@ -17,7 +17,7 @@ It helps to understand how an attacker might penetrate defenses, to evaluate ins
 Furthermore, it allows running training scenarios for security professionals, e.g., in cyber ranges where practical exercises can be performed.
 Unfortunately, adversary emulation requires significant time, effort, and specialized professionals to conduct.
 
-![](/2024/08/bountyhunter_wernerherzog.png)
+![](/2024/09/bountyhunter_wernerherzog.png)
 
 ## Cyber Adversary Emulation Tools
 In order to reduce the costs and increase the effectiveness of security assessments, adversary emulation tools can be used to automate the emulation of real-world attackers.
@@ -57,7 +57,7 @@ It successfully gathers valid SSH credentials and uses them to copy and start a 
 Next, the Bounty Hunter detects that it needs elevated privileges for its chosen final ability (`Credential Dumping`) and decides to start a privilege escalation by running a UAC Bypass.
 As a result of this step, a new elevated agent was started (`ebdwxy`) and the final ability can be executed, concluding the operation.
 
-|                                                                               ![](/2024/08/bountyhunter_scenario1.png)                                                                                |
+|                                                                               ![](/2024/09/bountyhunter_scenario1.png)                                                                                |
 |:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------:|
 | *Example operation to demonstrate Initial Access and Privilege Escalation with the Bounty Hunter and a demo adversary profile. Note how three different agents are used during the different phases.* |
 
@@ -70,7 +70,7 @@ The test showed that the Bounty Hunter is able to initially access a Windows Wor
 To achieve its goal, the Bounty Hunter was only provided with a high reward of the final ability that executes a command using the Golden Ticket and the name of the interface to scan initially.
 All other information needed for the successful execution, including the domain name, domain admin credentials, SID values, and NTLM hahses, were collected autonomously.
 
-|                                                                                              ![](/2024/08/bountyhunter_scenario2.png)                                                                                               |
+|                                                                                              ![](/2024/09/bountyhunter_scenario2.png)                                                                                               |
 |:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------:|
 | *Example operation to demonstrate the level of complexity the Bounty Hunter supports based on an APT29 campaign. During the campaign, a Windows Active Directory Domain is compromised by running a Kerberos Golden Ticket Attack.* |
 
