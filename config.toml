@@ -3,10 +3,12 @@ baseurl = "https://lolcads.github.io"
 title = "lolcads tech blog"
 author = "lolcads"
 copyright = "lolcads"
-paginate = 10
 languageCode = "en"
 defaultContentLanguage = "en"
 theme = "tailwind"
+
+[pagination]
+  pagerSize = 10
 
 [params]
   # dir name of your blog content (default is `content/posts`).
