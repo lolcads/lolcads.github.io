@@ -33,13 +33,13 @@ off an older device:</p><pre tabindex=0><code>% fd &#39;.*?.bin$&#39;
 870336-925103.zip_extract/vws/dag/CPY-v124_22_t_throttle.V124_22_T5/vob/ios/sys/firmware/pas/hifnhsp/obj/kontrol/thaddeus_flash.bin
 925104-1171822.zip_extract/vws/dag/CPY-v124_22_t_throttle.V124_22_T5/vob/ios/sys/firmware/pas/hifnhsp/obj/kontrol/thaddeus_hsp.bin
 </code></pre><p>Good luck figuring out what processor to select for each of those embedded
-blobs!</p><p>We have a great tool for that purpose, the<a href=https://github.com/fkie-cad/Codescanner target=_blank rel=noopener><code>Codescanner</code></a>
+blobs!</p><p>We have a great tool for that purpose, the <a href=https://github.com/fkie-cad/Codescanner target=_blank rel=noopener><code>Codescanner</code></a>
 . It works very well.
-However, I have a longstanding<a href=https://github.com/fkie-cad/Codescanner/blob/main/C_lib/libcodescan.so target=_blank rel=noopener>problem</a>
+However, I have a longstanding <a href=https://github.com/fkie-cad/Codescanner/blob/main/C_lib/libcodescan.so target=_blank rel=noopener>problem</a>
 with it. Besides that, it&rsquo;s written in C++ and Python, and I think that
 everything, absolutely everything, should be written in Rust (and open source).</p><p>So, let&rsquo;s write a tool that identifies processor instructions in binary blobs!
-Or is there anything more fun to do on a sunny weekend?</p><p><em>Note:</em> You can find the <strong>source code on<a href=https://github.com/vobst/coderec target=_blank rel=noopener>GitHub</a>
-</strong>.</p><h2 id=statistics-of-machine-code>Statistics of Machine Code</h2><p>My core idea for the implementation is based on the<a href=https://github.com/airbus-seclab/cpu_rec target=_blank rel=noopener><code>cpu_rec</code></a>
+Or is there anything more fun to do on a sunny weekend?</p><p><em>Note:</em> You can find the <strong>source code on <a href=https://github.com/vobst/coderec target=_blank rel=noopener>GitHub</a>
+</strong>.</p><h2 id=statistics-of-machine-code>Statistics of Machine Code</h2><p>My core idea for the implementation is based on the <a href=https://github.com/airbus-seclab/cpu_rec target=_blank rel=noopener><code>cpu_rec</code></a>
 tool by the awesome guys
 from Airbus Seclab<sup id=fnref:3><a href=#fn:3 class=footnote-ref role=doc-noteref>3</a></sup>.</p><p><code>cpu_rec</code>&rsquo;s detection mechanism is built around using different n-gram
 distributions (bigrams and trigrams) of the instruction bytes as a unique&ldquo;fingerprint&rdquo; of the corresponding processor. It computes these distributions
