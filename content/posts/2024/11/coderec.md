@@ -40,23 +40,19 @@ off an older device:
 Good luck figuring out what processor to select for each of those embedded
 blobs!
 
-We have a great tool for that purpose, the
-[`Codescanner`](https://github.com/fkie-cad/Codescanner). It works very well.
-However, I have a longstanding
-[problem](https://github.com/fkie-cad/Codescanner/blob/main/C_lib/libcodescan.so)
+We have a great tool for that purpose, the [`Codescanner`](https://github.com/fkie-cad/Codescanner). It works very well.
+However, I have a longstanding [problem](https://github.com/fkie-cad/Codescanner/blob/main/C_lib/libcodescan.so)
 with it. Besides that, it's written in C++ and Python, and I think that
 everything, absolutely everything, should be written in Rust (and open source).
 
 So, let's write a tool that identifies processor instructions in binary blobs!
 Or is there anything more fun to do on a sunny weekend?
 
-_Note:_ You can find the __source code on
-[GitHub](https://github.com/vobst/coderec)__.
+_Note:_ You can find the __source code on [GitHub](https://github.com/vobst/coderec)__.
 
 ## Statistics of Machine Code
 
-My core idea for the implementation is based on the
-[`cpu_rec`](https://github.com/airbus-seclab/cpu_rec) tool by the awesome guys
+My core idea for the implementation is based on the [`cpu_rec`](https://github.com/airbus-seclab/cpu_rec) tool by the awesome guys
 from Airbus Seclab[^2].
 
 `cpu_rec`'s detection mechanism is built around using different n-gram
@@ -107,8 +103,7 @@ relevant distributions for each piece, and find the architecture
 with the "closest" distribution in the ground truth corpus.
 
 Concerning the choice for distributions (bigrams and trigrams) and
-"distance measure"[^4] (
-[Kullback-Leibler](https://en.wikipedia.org/wiki/Kullback-Leibler_divergence)
+"distance measure"[^4] ([Kullback-Leibler](https://en.wikipedia.org/wiki/Kullback-Leibler_divergence)
 divergence (KL), aka. cross-entropy) I decided to stick with `cpu_rec`'s choices
 for now. However, I guess one could experiment with other distributions and
 measures as well.
