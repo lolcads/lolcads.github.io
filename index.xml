@@ -1,4 +1,26 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>lolcads tech blog</title><link>https://lolcads.github.io/</link><description>Recent content on lolcads tech blog</description><generator>Hugo</generator><language>en</language><managingEditor>lolcads@posteo.net (lolcads)</managingEditor><webMaster>lolcads@posteo.net (lolcads)</webMaster><copyright>lolcads</copyright><lastBuildDate>Tue, 14 Jan 2025 10:00:00 +0200</lastBuildDate><atom:link href="https://lolcads.github.io/index.xml" rel="self" type="application/rss+xml"/><item><title>Outsmarting the Watchdog: How can Adversaries evade Sigma Rule Detection during a Kerberos Golden Ticket Attack?</title><link>https://lolcads.github.io/posts/2025/01/evadingsigma/</link><pubDate>Tue, 14 Jan 2025 10:00:00 +0200</pubDate><author>lolcads@posteo.net (lolcads)</author><guid>https://lolcads.github.io/posts/2025/01/evadingsigma/</guid><description>&lt;h2 id="introduction">Introduction&lt;/h2>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>lolcads tech blog</title><link>https://lolcads.github.io/</link><description>Recent content on lolcads tech blog</description><generator>Hugo</generator><language>en</language><managingEditor>lolcads@posteo.net (lolcads)</managingEditor><webMaster>lolcads@posteo.net (lolcads)</webMaster><copyright>lolcads</copyright><lastBuildDate>Wed, 21 May 2025 18:32:12 +0200</lastBuildDate><atom:link href="https://lolcads.github.io/index.xml" rel="self" type="application/rss+xml"/><item><title>How to build a high-performance network fuzzer with LibAFL and libdesock</title><link>https://lolcads.github.io/posts/2025/05/high_performance_network_fuzzing/</link><pubDate>Wed, 21 May 2025 18:32:12 +0200</pubDate><author>lolcads@posteo.net (lolcads)</author><guid>https://lolcads.github.io/posts/2025/05/high_performance_network_fuzzing/</guid><description>&lt;h2 id="introduction">Introduction&lt;/h2>
+&lt;p>Existing network fuzzing solutions struggle on all fronts.
+Speed is a big problem because they use either real network connections or
+emulation/virtualization for snapshot-based fuzzing, both of which have a
+huge overhead.
+And, they struggle with deeply exploring the target since most of
+the tools out there are built on top of AFL.&lt;br>
+For our vulnerability research, we built a high-performance network fuzzer
+that tackles these problems and would like to present its setup in this post.&lt;br>
+The first issue we addressed was the problem of input generation. We developed
+our own input representation and mutators that work with text-based protocols.
+For that we used &lt;a href="https://github.com/AFLplusplus/LibAFL" target="_blank" rel="noopener">LibAFL&lt;/a>
+, a library for building custom fuzzers, which made
+this very easy.&lt;br>
+The second problem we approached was how to feed inputs to network applications.
+For this, we chose to &amp;ldquo;desocket&amp;rdquo; the applications with &lt;a href="https://github.com/fkie-cad/libdesock" target="_blank" rel="noopener">libdesock&lt;/a>
+ and serve
+the individual packets over a shared memory channel.&lt;br>
+We compared our tool to &lt;a href="https://github.com/aflnet/aflnet" target="_blank" rel="noopener">AFLNet&lt;/a>
+, arguably the most popular network fuzzer at
+the time of writing this, and found that our setup gave us a 42x performance boost,
+orders of magnitude more coverage and new vulnerabilities in already heavily
+fuzzed software.&lt;/p></description></item><item><title>Outsmarting the Watchdog: How can Adversaries evade Sigma Rule Detection during a Kerberos Golden Ticket Attack?</title><link>https://lolcads.github.io/posts/2025/01/evadingsigma/</link><pubDate>Tue, 14 Jan 2025 10:00:00 +0200</pubDate><author>lolcads@posteo.net (lolcads)</author><guid>https://lolcads.github.io/posts/2025/01/evadingsigma/</guid><description>&lt;h2 id="introduction">Introduction&lt;/h2>
 &lt;p>In the face of increasing amounts of cyber threats, organizations employ security information and event management (SIEM) systems as a way to collect and analyze information at a central place to detect and counteract against potential cyberattacks.
 One common way to detect malicious behavior using this information are &lt;a href="https://sigmahq.io/docs/basics/rules.html" target="_blank" rel="noopener">Sigma rules&lt;/a>
  and the corresponding Sigma detection format.
