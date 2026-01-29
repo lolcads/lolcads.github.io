@@ -1,5 +1,5 @@
 <!doctype html><html lang=en dir=ltr><head><title>libdesock :: lolcads tech blog</title><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=description content="Fuzzing Network Applications with AFL and libdesock Fuzzing network servers with AFL is challenging since AFL provides its input via stdin or command line arguments while servers get their input over network connections. As the popularity of AFL grew, many attempts have been made of fuzzing popular servers like apache and nginx using different techniques and hacky workarounds. However an off-the-shelf network fuzzing solution for AFL didn&rsquo;t exist for a long time until so-called &ldquo;desocketing&rdquo; tools emerged. These desocketing tools enabled network fuzzing without making a lot of additional modifications to the program under test and quickly became widely used in combination with AFL.
-"><meta name=keywords content="fuzzing,network,sockets,emulation"><meta name=robots content="noodp"><link rel=manifest href=/manifest.json><meta property="og:url" content="https://lolcads.github.io/posts/2022/02/libdesock/"><meta property="og:site_name" content="lolcads tech blog"><meta property="og:title" content="libdesock"><meta property="og:description" content="Fuzzing Network Applications with AFL and libdesock Fuzzing network servers with AFL is challenging since AFL provides its input via stdin or command line arguments while servers get their input over network connections. As the popularity of AFL grew, many attempts have been made of fuzzing popular servers like apache and nginx using different techniques and hacky workarounds. However an off-the-shelf network fuzzing solution for AFL didn’t exist for a long time until so-called “desocketing” tools emerged. These desocketing tools enabled network fuzzing without making a lot of additional modifications to the program under test and quickly became widely used in combination with AFL."><meta property="og:locale" content="en"><meta property="og:type" content="article"><meta property="article:section" content="posts"><meta property="article:published_time" content="2022-02-22T14:24:40+01:00"><meta property="article:modified_time" content="2022-02-22T14:24:40+01:00"><meta property="article:tag" content="Fuzzing"><meta property="article:tag" content="Network"><meta property="article:tag" content="Sockets"><meta property="article:tag" content="Emulation"><meta name=twitter:card content="summary"><meta name=twitter:title content="libdesock"><meta name=twitter:description content="Fuzzing Network Applications with AFL and libdesock Fuzzing network servers with AFL is challenging since AFL provides its input via stdin or command line arguments while servers get their input over network connections. As the popularity of AFL grew, many attempts have been made of fuzzing popular servers like apache and nginx using different techniques and hacky workarounds. However an off-the-shelf network fuzzing solution for AFL didn’t exist for a long time until so-called “desocketing” tools emerged. These desocketing tools enabled network fuzzing without making a lot of additional modifications to the program under test and quickly became widely used in combination with AFL."><link rel=canonical href=https://lolcads.github.io/posts/2022/02/libdesock/><link rel="shortcut icon" href=/favicon.ico><link rel=stylesheet href=/css/index.min.14211377552be17d56465ae537fca1a7e426b22c2c4ba496c85e278aaa470d24.css></head><body class="flex flex-col min-h-screen w-full bg-slate-50 dark:bg-gray-800"><header class="flex flex-none justify-center z-10"><div class="flex flex-row gap justify-between w-full max-w-4xl lg:max-w-5xl h-12 mt-3"><div class="flex-none ml-2 md:ml-0"><a href=/><img class="h-12 w-12 rounded-full object-cover bg-gray-100" src=/logo.png alt=logo></a></div><div class=flex-1></div><div class=flex-none><nav class="h-full static"><button id=navbar-menu-toggle type=button class="inline-flex items-center p-2 text-sm text-slate-800 dark:text-slate-200 rounded-lg md:hidden" aria-controls=navbar-menu aria-expanded=false>
+"><meta name=keywords content="fuzzing,network,sockets,emulation"><meta name=robots content="noodp"><link rel=manifest href=/manifest.json><meta property="og:url" content="https://lolcads.github.io/posts/2022/02/libdesock/"><meta property="og:site_name" content="lolcads tech blog"><meta property="og:title" content="libdesock"><meta property="og:description" content="Fuzzing Network Applications with AFL and libdesock Fuzzing network servers with AFL is challenging since AFL provides its input via stdin or command line arguments while servers get their input over network connections. As the popularity of AFL grew, many attempts have been made of fuzzing popular servers like apache and nginx using different techniques and hacky workarounds. However an off-the-shelf network fuzzing solution for AFL didn’t exist for a long time until so-called “desocketing” tools emerged. These desocketing tools enabled network fuzzing without making a lot of additional modifications to the program under test and quickly became widely used in combination with AFL."><meta property="og:locale" content="en"><meta property="og:type" content="article"><meta property="article:section" content="posts"><meta property="article:published_time" content="2022-02-22T14:24:40+01:00"><meta property="article:modified_time" content="2022-02-22T14:24:40+01:00"><meta property="article:tag" content="Fuzzing"><meta property="article:tag" content="Network"><meta property="article:tag" content="Sockets"><meta property="article:tag" content="Emulation"><meta name=twitter:card content="summary"><meta name=twitter:title content="libdesock"><meta name=twitter:description content="Fuzzing Network Applications with AFL and libdesock Fuzzing network servers with AFL is challenging since AFL provides its input via stdin or command line arguments while servers get their input over network connections. As the popularity of AFL grew, many attempts have been made of fuzzing popular servers like apache and nginx using different techniques and hacky workarounds. However an off-the-shelf network fuzzing solution for AFL didn’t exist for a long time until so-called “desocketing” tools emerged. These desocketing tools enabled network fuzzing without making a lot of additional modifications to the program under test and quickly became widely used in combination with AFL."><link rel=canonical href=https://lolcads.github.io/posts/2022/02/libdesock/><link rel="shortcut icon" href=/favicon.ico><link rel=stylesheet href=/css/index.min.08ae78ad799bdf6bc07f88b81fb42f6102cb7ef8c52893763bcc6ef38078b13f.css></head><body class="flex flex-col min-h-screen w-full bg-slate-50 dark:bg-gray-800"><header class="flex flex-none justify-center z-10"><div class="flex flex-row gap justify-between w-full max-w-4xl lg:max-w-5xl h-12 mt-3"><div class="flex-none ml-2 md:ml-0"><a href=/><img class="h-12 w-12 rounded-full object-cover bg-gray-100" src=/logo.png alt=logo></a></div><div class=flex-1></div><div class=flex-none><nav class="h-full static"><button id=navbar-menu-toggle type=button class="inline-flex items-center p-2 text-sm text-slate-800 dark:text-slate-200 rounded-lg md:hidden" aria-controls=navbar-menu aria-expanded=false>
 <span class=sr-only>Open main menu</span>
 <i class="w-8 h-8"><svg class="icon icon-tabler icon-tabler-menu-2" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></svg></i></button><div class="absolute md:static top-16 left-0 right-0 z-50 hidden w-full md:block md:w-auto" id=navbar-menu><ul class="flex flex-col mx-2 md:mx-0 md:flex-row md:border-0 rounded-sm md:rounded-full px-3 text-base font-medium text-slate-800 dark:text-slate-200 shadow-lg bg-white dark:bg-gray-600 shadow-slate-800/5 dark:shadow-slate-200/5 ring-1 ring-slate-900/5 dark:ring-slate-100/5"><li id=post><a class="block px-3 py-3 hover:text-emerald-600 text-emerald-600" href=/posts/ title=Blog>Blog</a></li><li id=about><a class="block px-3 py-3 hover:text-emerald-600" href=/about/ title=About>About</a></li><li id=contact><a class="block px-3 py-3 hover:text-emerald-600" href=/contact/ title=Contact>Contact</a></li></ul></div></nav></div><div class="flex-none mx-1"></div><div class="flex-none md:hidden"><a href=/search/ class="inline-flex items-center p-2 text-sm text-slate-800 dark:text-slate-200 rounded-lg" aria-controls=navbar-menu aria-expanded=false><span class=sr-only>Search</span>
 <i class="w-8 h-8"><svg class="icon icon-tabler icon-tabler-search" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 10m-7 0a7 7 0 1014 0A7 7 0 103 10"/><path d="M21 21l-6-6"/></svg></i></a></div><div class="darkmode-toggle flex flex-none mr-2 md:mr-0"><label for=darkmode-toggle class="flex items-center px-3 cursor-pointer rounded-full bg-gray-100 dark:bg-gray-600" title="Toggle dark mode"><input name=darkmode-toggle id=darkmode-toggle type=checkbox class="sr-only peer" aria-label="Toggle dark mode"><div class="group flex flex-row gap-1 justify-center h-8 px-1 rounded-full bg-white dark:bg-gray-700"><i class="h-6 w-6 flex-none rounded-full bg-yellow-400 place-self-center peer-checked:group-[]:invisible"><svg class="icon icon-tabler icon-tabler-brightness-down" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-3 0a3 3 0 106 0 3 3 0 10-6 0"/><path d="M12 5v.01"/><path d="M17 7v.01"/><path d="M19 12v.01"/><path d="M17 17v.01"/><path d="M12 19v.01"/><path d="M7 17v.01"/><path d="M5 12v.01"/><path d="M7 7v.01"/></svg>
@@ -72,99 +72,99 @@ The following example demonstrates the modifications necessary to fuzz <a href=h
 </span></span><span class=line><span class=cl><span class=nb>cd</span> vsftpd-3.0.5
 </span></span></code></pre></div><h3 id=patching-the-source>Patching the source</h3><p>vsftpd creates a new child process for each connection. We prohibit that
 by commenting out the code that does the fork in <code>standalone.c</code>:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-diff data-lang=diff><span class=line><span class=cl><span class=gu>@@ -153,6 +153,7 @@ vsf_standalone_main(void)
-</span></span></span><span class=line><span class=cl><span class=gu></span>     child_info.num_this_ip = 0;
+</span></span></span><span class=line><span class=cl>     child_info.num_this_ip = 0;
 </span></span><span class=line><span class=cl>     p_raw_addr = vsf_sysutil_sockaddr_get_raw_addr(p_accept_addr);
 </span></span><span class=line><span class=cl>     child_info.num_this_ip = handle_ip_count(p_raw_addr);
 </span></span><span class=line><span class=cl><span class=gi>+    /*
-</span></span></span><span class=line><span class=cl><span class=gi></span>     if (tunable_isolate)
+</span></span></span><span class=line><span class=cl>     if (tunable_isolate)
 </span></span><span class=line><span class=cl>     {
 </span></span><span class=line><span class=cl>       if (tunable_http_enable &amp;&amp; tunable_isolate_network)
 </span></span><span class=line><span class=cl><span class=gu>@@ -168,6 +169,8 @@ vsf_standalone_main(void)
-</span></span></span><span class=line><span class=cl><span class=gu></span>     {
+</span></span></span><span class=line><span class=cl>     {
 </span></span><span class=line><span class=cl>       new_child = vsf_sysutil_fork_failok();
 </span></span><span class=line><span class=cl>     }
 </span></span><span class=line><span class=cl><span class=gi>+    */
 </span></span></span><span class=line><span class=cl><span class=gi>+    new_child = 0;
-</span></span></span><span class=line><span class=cl><span class=gi></span>     if (new_child != 0)
+</span></span></span><span class=line><span class=cl>     if (new_child != 0)
 </span></span><span class=line><span class=cl>     {
 </span></span><span class=line><span class=cl>       /* Parent context */
 </span></span></code></pre></div><p>vsftpd duplicates the FTP command socket to stdin, stdout and stderr.
 This obviously interfers with AFL so we disable that in <code>defs.h</code> &mldr;</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-diff data-lang=diff><span class=line><span class=cl><span class=gu>@@ -3,7 +3,7 @@
-</span></span></span><span class=line><span class=cl><span class=gu></span> 
+</span></span></span><span class=line><span class=cl> 
 </span></span><span class=line><span class=cl> #define VSFTP_DEFAULT_CONFIG    &#34;/etc/vsftpd.conf&#34;
 </span></span><span class=line><span class=cl> 
 </span></span><span class=line><span class=cl><span class=gd>-#define VSFTP_COMMAND_FD        0
-</span></span></span><span class=line><span class=cl><span class=gd></span><span class=gi>+#define VSFTP_COMMAND_FD        29
-</span></span></span><span class=line><span class=cl><span class=gi></span> 
+</span></span></span><span class=line><span class=cl><span class=gi>+#define VSFTP_COMMAND_FD        29
+</span></span></span><span class=line><span class=cl> 
 </span></span><span class=line><span class=cl> #define VSFTP_PASSWORD_MAX      128
 </span></span><span class=line><span class=cl> #define VSFTP_USERNAME_MAX      128
 </span></span></code></pre></div><p>&mldr; and in <code>standalone.c</code></p><div class=highlight><pre tabindex=0 class=chroma><code class=language-diff data-lang=diff><span class=line><span class=cl><span class=gu>@@ -205,9 +205,7 @@ static void
-</span></span></span><span class=line><span class=cl><span class=gu></span> prepare_child(int new_client_sock)
+</span></span></span><span class=line><span class=cl> prepare_child(int new_client_sock)
 </span></span><span class=line><span class=cl> {
 </span></span><span class=line><span class=cl>   /* We must satisfy the contract: command socket on fd 0, 1, 2 */
 </span></span><span class=line><span class=cl><span class=gd>-  vsf_sysutil_dupfd2(new_client_sock, 0);
 </span></span></span><span class=line><span class=cl><span class=gd>-  vsf_sysutil_dupfd2(new_client_sock, 1);
 </span></span></span><span class=line><span class=cl><span class=gd>-  vsf_sysutil_dupfd2(new_client_sock, 2);
-</span></span></span><span class=line><span class=cl><span class=gd></span><span class=gi>+  vsf_sysutil_dupfd2(new_client_sock, VSFTP_COMMAND_FD);
-</span></span></span><span class=line><span class=cl><span class=gi></span>   if (new_client_sock &gt; 2)
+</span></span></span><span class=line><span class=cl><span class=gi>+  vsf_sysutil_dupfd2(new_client_sock, VSFTP_COMMAND_FD);
+</span></span></span><span class=line><span class=cl>   if (new_client_sock &gt; 2)
 </span></span><span class=line><span class=cl>   {
 </span></span><span class=line><span class=cl>     vsf_sysutil_close(new_client_sock);
 </span></span></code></pre></div><p>Next, vsftpd enforces a custom memory limit that interfers with ASAN.
 We disable the memory limit in <code>sysutil.c</code></p><div class=highlight><pre tabindex=0 class=chroma><code class=language-diff data-lang=diff><span class=line><span class=cl><span class=gu>@@ -2793,6 +2793,7 @@ void
-</span></span></span><span class=line><span class=cl><span class=gu></span> vsf_sysutil_set_address_space_limit(unsigned long bytes)
+</span></span></span><span class=line><span class=cl> vsf_sysutil_set_address_space_limit(unsigned long bytes)
 </span></span><span class=line><span class=cl> {
 </span></span><span class=line><span class=cl>   /* Unfortunately, OpenBSD is missing RLIMIT_AS. */
 </span></span><span class=line><span class=cl><span class=gi>+  return;
-</span></span></span><span class=line><span class=cl><span class=gi></span> #ifdef RLIMIT_AS
+</span></span></span><span class=line><span class=cl> #ifdef RLIMIT_AS
 </span></span><span class=line><span class=cl>   int ret;
 </span></span><span class=line><span class=cl>   struct rlimit rlim;
 </span></span></code></pre></div><p>Then we add a forkserver to vsftpd in <code>prelogin.c</code></p><div class=highlight><pre tabindex=0 class=chroma><code class=language-diff data-lang=diff><span class=line><span class=cl><span class=gu>@@ -59,6 +59,7 @@ init_connection(struct vsf_session* p_sess)
-</span></span></span><span class=line><span class=cl><span class=gu></span>   {
+</span></span></span><span class=line><span class=cl>   {
 </span></span><span class=line><span class=cl>     emit_greeting(p_sess);
 </span></span><span class=line><span class=cl>   }
 </span></span><span class=line><span class=cl><span class=gi>+  __AFL_INIT();
-</span></span></span><span class=line><span class=cl><span class=gi></span>   parse_username_password(p_sess);
+</span></span></span><span class=line><span class=cl>   parse_username_password(p_sess);
 </span></span><span class=line><span class=cl> }
 </span></span></code></pre></div><p>vsftpd registers a <code>SIGCHLD</code> handler that interfers with the forkserver
 so we have to disable that too in <code>standalone.c</code></p><div class=highlight><pre tabindex=0 class=chroma><code class=language-diff data-lang=diff><span class=line><span class=cl><span class=gu>@@ -74,7 +74,7 @@ vsf_standalone_main(void)
-</span></span></span><span class=line><span class=cl><span class=gu></span>   {
+</span></span></span><span class=line><span class=cl>   {
 </span></span><span class=line><span class=cl>     vsf_sysutil_setproctitle(&#34;LISTENER&#34;);
 </span></span><span class=line><span class=cl>   }
 </span></span><span class=line><span class=cl><span class=gd>-  vsf_sysutil_install_sighandler(kVSFSysUtilSigCHLD, handle_sigchld, 0, 1);
-</span></span></span><span class=line><span class=cl><span class=gd></span><span class=gi>+  //vsf_sysutil_install_sighandler(kVSFSysUtilSigCHLD, handle_sigchld, 0, 1);
-</span></span></span><span class=line><span class=cl><span class=gi></span>   vsf_sysutil_install_sighandler(kVSFSysUtilSigHUP, handle_sighup, 0, 1);
+</span></span></span><span class=line><span class=cl><span class=gi>+  //vsf_sysutil_install_sighandler(kVSFSysUtilSigCHLD, handle_sigchld, 0, 1);
+</span></span></span><span class=line><span class=cl>   vsf_sysutil_install_sighandler(kVSFSysUtilSigHUP, handle_sighup, 0, 1);
 </span></span><span class=line><span class=cl>   if (tunable_listen)
 </span></span><span class=line><span class=cl>   {
 </span></span></code></pre></div><p>Last but not least we disable the <code>bug()</code> function in <code>utility.c</code>. This function does a failing <code>fcntl()</code>
 on an fd returned by the desocketing library since the fd is not a real socket. vsftpd handles the <code>fcntl()</code> failure by calling <code>bug()</code> again
 leading to an infinite loop.</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-diff data-lang=diff><span class=line><span class=cl><span class=gu>@@ -40,6 +40,7 @@ die2(const char* p_text1, const char* p_text2)
-</span></span></span><span class=line><span class=cl><span class=gu></span> void
+</span></span></span><span class=line><span class=cl> void
 </span></span><span class=line><span class=cl> bug(const char* p_text)
 </span></span><span class=line><span class=cl> {
 </span></span><span class=line><span class=cl><span class=gi>+  return;
-</span></span></span><span class=line><span class=cl><span class=gi></span>   /* Rats. Try and write the reason to the network for diagnostics */
+</span></span></span><span class=line><span class=cl>   /* Rats. Try and write the reason to the network for diagnostics */
 </span></span><span class=line><span class=cl>   vsf_sysutil_activate_noblock(VSFTP_COMMAND_FD);
 </span></span><span class=line><span class=cl>   (void) vsf_sysutil_write_loop(VSFTP_COMMAND_FD, &#34;500 OOPS: &#34;, 10);
 </span></span></code></pre></div><h3 id=build-configuration>Build configuration</h3><p>In the <code>Makefile</code> replace:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-diff data-lang=diff><span class=line><span class=cl><span class=gu>@@ -1,16 +1,16 @@
-</span></span></span><span class=line><span class=cl><span class=gu></span> # Makefile for systems with GNU tools
+</span></span></span><span class=line><span class=cl> # Makefile for systems with GNU tools
 </span></span><span class=line><span class=cl><span class=gd>-CC 	=	gcc
-</span></span></span><span class=line><span class=cl><span class=gd></span><span class=gi>+CC 	=	afl-clang-fast
-</span></span></span><span class=line><span class=cl><span class=gi></span> INSTALL	=	install
+</span></span></span><span class=line><span class=cl><span class=gi>+CC 	=	afl-clang-fast
+</span></span></span><span class=line><span class=cl> INSTALL	=	install
 </span></span><span class=line><span class=cl> IFLAGS  = -idirafter dummyinc
 </span></span><span class=line><span class=cl> #CFLAGS = -g
 </span></span><span class=line><span class=cl><span class=gd>-CFLAGS	=	-O2 -fPIE -fstack-protector --param=ssp-buffer-size=4 \
 </span></span></span><span class=line><span class=cl><span class=gd>-	-Wall -W -Wshadow -Werror -Wformat-security \
-</span></span></span><span class=line><span class=cl><span class=gd></span><span class=gi>+CFLAGS	=	-fsanitize=address -g -Og -fPIE -fstack-protector \
+</span></span></span><span class=line><span class=cl><span class=gi>+CFLAGS	=	-fsanitize=address -g -Og -fPIE -fstack-protector \
 </span></span></span><span class=line><span class=cl><span class=gi>+	-Wall -W -Wshadow -Wformat-security \
-</span></span></span><span class=line><span class=cl><span class=gi></span>     -D_FORTIFY_SOURCE=2 \
+</span></span></span><span class=line><span class=cl>     -D_FORTIFY_SOURCE=2 \
 </span></span><span class=line><span class=cl>     #-pedantic -Wconversion
 </span></span><span class=line><span class=cl> 
 </span></span><span class=line><span class=cl> LIBS	=	`./vsf_findlibs.sh`
 </span></span><span class=line><span class=cl><span class=gd>-LINK	=	-Wl,-s
 </span></span></span><span class=line><span class=cl><span class=gd>-LDFLAGS	=	-fPIE -pie -Wl,-z,relro -Wl,-z,now
-</span></span></span><span class=line><span class=cl><span class=gd></span><span class=gi>+LINK	=	
+</span></span></span><span class=line><span class=cl><span class=gi>+LINK	=	
 </span></span></span><span class=line><span class=cl><span class=gi>+LDFLAGS	=	-fPIE -pie -Wl,-z,relro -Wl,-z,now -fsanitize=address
-</span></span></span><span class=line><span class=cl><span class=gi></span> 
+</span></span></span><span class=line><span class=cl> 
 </span></span><span class=line><span class=cl> OBJS	=	main.o utility.o prelogin.o ftpcmdio.o postlogin.o privsock.o \
 </span></span><span class=line><span class=cl>         tunables.o ftpdataio.o secbuf.o ls.o \
 </span></span></code></pre></div><h3 id=runtime-configuration>Runtime configuration</h3><p>Like most other servers, vsftpd needs a config file. Create<code>fuzz.conf</code> with the following contents:</p><pre tabindex=0><code>listen=YES
@@ -190,4 +190,4 @@ download_enable=NO
 variable.</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-sh data-lang=sh><span class=line><span class=cl><span class=nb>export</span> <span class=nv>AFL_PRELOAD</span><span class=o>=</span>libdesock.so
 </span></span><span class=line><span class=cl>afl-fuzz -i corpus -o findings -m none -- ./vsftpd fuzz.conf
 </span></span></code></pre></div><p><div class=not-prose><figure><img src=/2022/02/afl.svg alt loading=lazy></figure></div></p><p>Now it&rsquo;s only a matter of high-quality custom mutators and time to find some bugs.</p><p>libdesock can be downloaded here: <a href=https://github.com/fkie-cad/libdesock target=_blank rel=noopener>https://github.com/fkie-cad/libdesock</a></p></article></div></div></div></main><footer class="flex flex-none justify-center"><section class="flex flex-col md:flex-row mx-2 md:mx-0 gap-2 md:gap-0 justify-between w-full max-w-4xl lg:max-w-5xl py-6 text-slate-500 dark:text-slate-300"><div class="flex flex-row"></div><div class=grow></div><div class="flex flex-row"><i class="h-6 w-6 flex-none"><svg class="icon icon-tabler icon-tabler-copyright" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1018 0A9 9 0 103 12"/><path d="M14 9.75a3.016 3.016.0 00-4.163.173 2.993 2.993.0 000 4.154A3.016 3.016.0 0014 14.25"/></svg>
-</i>2022 - 2025 lolcads</div><div class="flex flex-row"><span class="ml-0 pl-0 md:ml-2 md:pl-2 border-l-0 md:border-l border-slate-300 dark:border-slate-400">Powered by <a href=https://gohugo.io target=_blank rel=noopener class=underline>Hugo</a> <span class=text-red-600>&#9829;</span> <a href=https://github.com/tomowang/hugo-theme-tailwind target=_blank rel=noopener class=underline>Tailwind</a></span></div></section></footer><script src=/main.min.c6372b6836971865bd94bfde974748aca8415824a2facab6ccd66a87384bfacb.js></script><div class="hidden top-1 right-1" id=code-copy><i class="h-6 w-6 block"><svg class="icon icon-tabler icon-tabler-copy" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 7m0 2.667A2.667 2.667.0 019.667 7h8.666A2.667 2.667.0 0121 9.667v8.666A2.667 2.667.0 0118.333 21H9.667A2.667 2.667.0 017 18.333z"/><path d="M4.012 16.737A2.005 2.005.0 013 15V5c0-1.1.9-2 2-2h10c.75.0 1.158.385 1.5 1"/></svg></i></div><div class="hidden top-1 right-1" id=code-copy-done><i class="h-6 w-6 block"><svg class="icon icon-tabler icon-tabler-check" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5L20 7"/></svg></i></div><script src=/code-copy.min.e7b2a74adef1ed474c335c8bd5e7832b2316b8842b0f9184d65286c5bd64f51a.js></script></body></html>
+</i>2022 - 2026 lolcads</div><div class="flex flex-row"><span class="ml-0 pl-0 md:ml-2 md:pl-2 border-l-0 md:border-l border-slate-300 dark:border-slate-400">Powered by <a href=https://gohugo.io target=_blank rel=noopener class=underline>Hugo</a> <span class=text-red-600>&#9829;</span> <a href=https://github.com/tomowang/hugo-theme-tailwind target=_blank rel=noopener class=underline>Tailwind</a></span></div></section></footer><script src=/main.min.c6372b6836971865bd94bfde974748aca8415824a2facab6ccd66a87384bfacb.js></script><div class="hidden top-1 right-1" id=code-copy><i class="h-6 w-6 block"><svg class="icon icon-tabler icon-tabler-copy" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 7m0 2.667A2.667 2.667.0 019.667 7h8.666A2.667 2.667.0 0121 9.667v8.666A2.667 2.667.0 0118.333 21H9.667A2.667 2.667.0 017 18.333z"/><path d="M4.012 16.737A2.005 2.005.0 013 15V5c0-1.1.9-2 2-2h10c.75.0 1.158.385 1.5 1"/></svg></i></div><div class="hidden top-1 right-1" id=code-copy-done><i class="h-6 w-6 block"><svg class="icon icon-tabler icon-tabler-check" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5L20 7"/></svg></i></div><script src=/code-copy.min.e7b2a74adef1ed474c335c8bd5e7832b2316b8842b0f9184d65286c5bd64f51a.js></script></body></html>

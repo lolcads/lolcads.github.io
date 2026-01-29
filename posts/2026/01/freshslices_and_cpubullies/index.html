@@ -1,0 +1,191 @@
+<!doctype html><html lang=en dir=ltr><head><title>Improving Linux Heap Exploit Reliability with FreshSlices and CPU-Bullying :: lolcads tech blog</title><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=description content="Exploits built around heap-based memory corruptions will never be perfectly reliable. There are multiple factors contributing to this, one being that the heap is shared among all tasks (user processes and kernel threads) running on a machine. Thus, the task running the exploit cannot exercise perfect control over it.
+Much has already been written about the art of shaping the kernel heap and creating desired layouts reliably. This post assumes a reader who is somewhat familiar with the subject, i.e., I will not recount any basics here. Instead, I will focus on two generic techniques for improving an exploit process&rsquo; control over the kernel heap.
+"><meta name=keywords content="Linux,kernel,exploitation,heap,reliability"><meta name=robots content="noodp"><link rel=manifest href=/manifest.json><meta property="og:url" content="https://lolcads.github.io/posts/2026/01/freshslices_and_cpubullies/"><meta property="og:site_name" content="lolcads tech blog"><meta property="og:title" content="Improving Linux Heap Exploit Reliability with FreshSlices and CPU-Bullying"><meta property="og:description" content="This blog post presents two (afaik) novel, generic techniques for improving the reliability of kernel heap exploits."><meta property="og:locale" content="en"><meta property="og:type" content="article"><meta property="article:section" content="posts"><meta property="article:published_time" content="2026-01-29T10:00:00+02:00"><meta property="article:modified_time" content="2026-01-29T10:00:00+02:00"><meta property="article:tag" content="Linux"><meta property="article:tag" content="Kernel"><meta property="article:tag" content="Exploitation"><meta property="article:tag" content="Heap"><meta property="article:tag" content="Reliability"><meta name=twitter:card content="summary"><meta name=twitter:title content="Improving Linux Heap Exploit Reliability with FreshSlices and CPU-Bullying"><meta name=twitter:description content="This blog post presents two (afaik) novel, generic techniques for improving the reliability of kernel heap exploits."><link rel=canonical href=https://lolcads.github.io/posts/2026/01/freshslices_and_cpubullies/><link rel="shortcut icon" href=/favicon.ico><link rel=stylesheet href=/css/index.min.08ae78ad799bdf6bc07f88b81fb42f6102cb7ef8c52893763bcc6ef38078b13f.css></head><body class="flex flex-col min-h-screen w-full bg-slate-50 dark:bg-gray-800"><header class="flex flex-none justify-center z-10"><div class="flex flex-row gap justify-between w-full max-w-4xl lg:max-w-5xl h-12 mt-3"><div class="flex-none ml-2 md:ml-0"><a href=/><img class="h-12 w-12 rounded-full object-cover bg-gray-100" src=/logo.png alt=logo></a></div><div class=flex-1></div><div class=flex-none><nav class="h-full static"><button id=navbar-menu-toggle type=button class="inline-flex items-center p-2 text-sm text-slate-800 dark:text-slate-200 rounded-lg md:hidden" aria-controls=navbar-menu aria-expanded=false>
+<span class=sr-only>Open main menu</span>
+<i class="w-8 h-8"><svg class="icon icon-tabler icon-tabler-menu-2" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></svg></i></button><div class="absolute md:static top-16 left-0 right-0 z-50 hidden w-full md:block md:w-auto" id=navbar-menu><ul class="flex flex-col mx-2 md:mx-0 md:flex-row md:border-0 rounded-sm md:rounded-full px-3 text-base font-medium text-slate-800 dark:text-slate-200 shadow-lg bg-white dark:bg-gray-600 shadow-slate-800/5 dark:shadow-slate-200/5 ring-1 ring-slate-900/5 dark:ring-slate-100/5"><li id=post><a class="block px-3 py-3 hover:text-emerald-600 text-emerald-600" href=/posts/ title=Blog>Blog</a></li><li id=about><a class="block px-3 py-3 hover:text-emerald-600" href=/about/ title=About>About</a></li><li id=contact><a class="block px-3 py-3 hover:text-emerald-600" href=/contact/ title=Contact>Contact</a></li></ul></div></nav></div><div class="flex-none mx-1"></div><div class="flex-none md:hidden"><a href=/search/ class="inline-flex items-center p-2 text-sm text-slate-800 dark:text-slate-200 rounded-lg" aria-controls=navbar-menu aria-expanded=false><span class=sr-only>Search</span>
+<i class="w-8 h-8"><svg class="icon icon-tabler icon-tabler-search" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 10m-7 0a7 7 0 1014 0A7 7 0 103 10"/><path d="M21 21l-6-6"/></svg></i></a></div><div class="darkmode-toggle flex flex-none mr-2 md:mr-0"><label for=darkmode-toggle class="flex items-center px-3 cursor-pointer rounded-full bg-gray-100 dark:bg-gray-600" title="Toggle dark mode"><input name=darkmode-toggle id=darkmode-toggle type=checkbox class="sr-only peer" aria-label="Toggle dark mode"><div class="group flex flex-row gap-1 justify-center h-8 px-1 rounded-full bg-white dark:bg-gray-700"><i class="h-6 w-6 flex-none rounded-full bg-yellow-400 place-self-center peer-checked:group-[]:invisible"><svg class="icon icon-tabler icon-tabler-brightness-down" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-3 0a3 3 0 106 0 3 3 0 10-6 0"/><path d="M12 5v.01"/><path d="M17 7v.01"/><path d="M19 12v.01"/><path d="M17 17v.01"/><path d="M12 19v.01"/><path d="M7 17v.01"/><path d="M5 12v.01"/><path d="M7 7v.01"/></svg>
+</i><i class="h-6 w-6 flex-none rounded-full place-self-center invisible peer-checked:group-[]:visible"><svg class="icon icon-tabler icon-tabler-moon-stars" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3c.132.0.263.0.393.0a7.5 7.5.0 007.92 12.446A9 9 0 1112 2.992z"/><path d="M17 4a2 2 0 002 2 2 2 0 00-2 2 2 2 0 00-2-2 2 2 0 002-2"/><path d="M19 11h2m-1-1v2"/></svg></i></div></label></div></div></header><main class="flex flex-auto justify-center"><div class="w-full max-w-4xl lg:max-w-5xl"><div class="flex flex-col mt-6 mx-2 md:mx-0 rounded-lg overflow-hidden shadow-md bg-white dark:bg-gray-700"><div><a href=/posts/2026/01/freshslices_and_cpubullies/></a></div><div class="flex flex-col gap-y-3 p-6"><h1 class="text-4xl font-semibold text-slate-800 dark:text-slate-100"><a href=/posts/2026/01/freshslices_and_cpubullies/>Improving Linux Heap Exploit Reliability with FreshSlices and CPU-Bullying</a></h1><h2 class="my-4 text-large text-slate-600 dark:text-slate-300">This blog post presents two (afaik) novel, generic techniques for improving the reliability of kernel heap exploits.</h2><ul class="flex flex-row flex-wrap text-slate-500 dark:text-slate-300"><li><a href=/tags/linux/ class="flex flex-row text-sm mr-2 py-1"><i class="h-5 w-5 flex-none"><svg class="icon icon-tabler icon-tabler-hash" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 9h14"/><path d="M5 15h14"/><path d="M11 4 7 20"/><path d="M17 4l-4 16"/></svg>
+</i><span class=ml-0>Linux</span></a></li><li><a href=/tags/kernel/ class="flex flex-row text-sm mr-2 py-1"><i class="h-5 w-5 flex-none"><svg class="icon icon-tabler icon-tabler-hash" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 9h14"/><path d="M5 15h14"/><path d="M11 4 7 20"/><path d="M17 4l-4 16"/></svg>
+</i><span class=ml-0>Kernel</span></a></li><li><a href=/tags/exploitation/ class="flex flex-row text-sm mr-2 py-1"><i class="h-5 w-5 flex-none"><svg class="icon icon-tabler icon-tabler-hash" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 9h14"/><path d="M5 15h14"/><path d="M11 4 7 20"/><path d="M17 4l-4 16"/></svg>
+</i><span class=ml-0>Exploitation</span></a></li><li><a href=/tags/heap/ class="flex flex-row text-sm mr-2 py-1"><i class="h-5 w-5 flex-none"><svg class="icon icon-tabler icon-tabler-hash" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 9h14"/><path d="M5 15h14"/><path d="M11 4 7 20"/><path d="M17 4l-4 16"/></svg>
+</i><span class=ml-0>Heap</span></a></li><li><a href=/tags/reliability/ class="flex flex-row text-sm mr-2 py-1"><i class="h-5 w-5 flex-none"><svg class="icon icon-tabler icon-tabler-hash" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 9h14"/><path d="M5 15h14"/><path d="M11 4 7 20"/><path d="M17 4l-4 16"/></svg>
+</i><span class=ml-0>Reliability</span></a></li></ul><div class="flex flex-col gap-y-1 md:flex-row md:gap-y-0 md:gap-x-4 text-slate-500 dark:text-slate-300"><div class="flex flex-row text-base gap-x-1"><i class="h-6 w-6 flex-none"><svg class="icon icon-tabler icon-tabler-calendar" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V7z"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M4 11h16"/><path d="M11 15h1"/><path d="M12 15v3"/></svg>
+</i><time datetime=2026-01-29T10:00:00+02:00>2026-01-29</time></div><div class="flex flex-row text-base gap-x-1"><i class="h-6 w-6 flex-none"><svg class="icon icon-tabler icon-tabler-hourglass-high" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6.5 7h11"/><path d="M6 20v-2a6 6 0 1112 0v2a1 1 0 01-1 1H7a1 1 0 01-1-1z"/><path d="M6 4v2a6 6 0 1012 0V4a1 1 0 00-1-1H7A1 1 0 006 4z"/></svg>
+</i><span>13 minutes to read</span></div></div><div class="flex flex-col gap-y-1 md:flex-row md:gap-y-0 md:gap-x-4 text-slate-500 dark:text-slate-300"><div class="flex flex-row text-base gap-x-1"><i class="h-6 w-6 flex-none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-user"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M8 7a4 4 0 108 0A4 4 0 008 7"/><path d="M6 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/></svg>
+</i><span>Valentin Obst</span></div></div><section class="prose prose-slate dark:prose-invert w-full max-w-4xl lg:max-w-5xl mt-6"><h2>Table of Contents</h2><aside><nav id=TableOfContents><ul><li><a href=#motivating-example>Motivating Example</a></li><li><a href=#technique-i-freshslices>Technique I: FreshSlices</a></li><li><a href=#technique-ii-cpu-bullying>Technique II: CPU-Bullying</a></li><li><a href=#project-ideas>Project Ideas</a></li><li><a href=#code>Code</a></li></ul></nav></aside></section><article class="mt-6 w-full max-w-4xl lg:max-w-5xl prose prose-slate dark:prose-invert prose-quoteless post-content"><p>Exploits built around heap-based memory corruptions will never be perfectly reliable. There are multiple factors contributing to this, one being that the heap is shared among all tasks (user processes and kernel threads) running on a machine. Thus, the task running the exploit cannot exercise perfect control over it.</p><p>Much has already been written about the art of shaping the kernel heap and creating desired layouts reliably. This post assumes a reader who is somewhat familiar with the subject, i.e., I will not recount any basics here. Instead, I will focus on two generic techniques for improving an exploit process&rsquo; control over the kernel heap.</p><h2 id=motivating-example>Motivating Example</h2><p>To get started, let&rsquo;s look at the timeline of a prototypical, heap-based kernel exploit. (In the example we will use a UAF vulnerability, but the same reasoning applies to OOB writes and DFs.)</p><table><thead><tr><th style=text-align:center><div class=not-prose><figure><img src=/2026/01/drawings-succ_expl.jpg alt=drawings-succ_expl loading=lazy></figure></div></th></tr></thead><tbody><tr><td style=text-align:center><em>Timeline of a successful kernel heap exploit.</em></td></tr></tbody></table><p>Here:</p><ol><li>The exploit task makes a syscall that results in the freeing of the vulnerable object.</li><li>Another syscall is performed to cause the allocation of another object in the slot previously occupied by the vulnerable object.</li><li>During a third syscall, a dangling pointer to the vulnerable object is used and the resulting type-confusion is exploited.</li></ol><p>So far, so good &ndash; but there is a time window between events 1 and 2 where the slot of the vulnerable object is vacant. I will call this time interval an <strong>&ldquo;exploit-critical region&rdquo; (ECR)</strong>. We can informally <strong>define an ECR as a time span in which any heap operation that is not controlled or observable by the exploit task has the potential of causing the exploit to fail.</strong> A single exploit may have multiple ECRs.</p><p>To get a feeling for how an uncontrolled heap operation during an ECR may cause exploit failure we can have a look at the following, alternative timeline.</p><table><thead><tr><th style=text-align:center><div class=not-prose><figure><img src=/2026/01/drawings-fail_exp.jpg alt=drawings-fail_exp loading=lazy></figure></div></th></tr></thead><tbody><tr><td style=text-align:center><em>Timeline of a failed kernel heap exploit.</em></td></tr></tbody></table><p>Here:</p><ol><li>The exploit task makes a syscall that results in the freeing of the vulnerable object.</li><li>An interrupt occurs, and on exit from the interrupt handler, the scheduler is invoked. It decides to withdraw the CPU from the exploit task.</li><li>Some unrelated task is scheduled. It performs a syscall that causes a heap allocation that reuses the vacant slot of the vulnerable object.</li><li>When the exploit task gets the CPU back, it tries to allocate the fake object in the slot previously occupied by the vulnerable object, however, this endeavor is doomed to failure.</li><li>The UAF is triggered but operates on the wrong object &ndash; a good recipe for blinking shift keys.</li></ol><p>In general, the <strong>reliability of heap exploitation is degraded by the following factors</strong>:</p><ol><li>unknown initial heap state,</li><li>randomization-based exploit mitigations,</li><li><strong>other actors using the same heap</strong> (above example),</li><li>task migration,</li><li>delayed work mechanisms.</li></ol><p>I&rsquo;ll now present two techniques aimed at addressing the third factor. It is assumed that exploitation can reliably take place on a single CPU via pinning. However, it may be possible to adapt the first technique to scenarios where pinning is blocked.</p><h2 id=technique-i-freshslices>Technique I: FreshSlices</h2><p><a href=https://www.vittoriozaccaria.net/blog/notes-on-linux-eevdf target=_blank rel=noopener>Task scheduling</a>
+in the Linux kernel is a somewhat complex topic and our discussion is going to remain on a qualitative level. In general, the scheduler&rsquo;s job is to multiplex the CPU among all runnable tasks. For our purposes, it suffices to know that the scheduler assigns a fraction of the CPU to each task and tries to ensure that in any given interval $\Delta t$ every runnable task has run for the time $c\Delta t$, where $c$ is the fraction of the CPU granted to the task. In reality, of course, $\Delta t$ is not arbitrarily small but somewhere on the order of milliseconds.</p><p>From this high-level design, it follows that a task which has already been executing for some time has consumed a larger share of its allotted CPU budget relative to its competitors. The key observation here is that <strong>the instantaneous risk of a task losing the CPU to another task increases the longer it has been running</strong>.</p><p>This implies that we want our ECR to be as close as possible to the start of our run on the CPU that the scheduler has granted us. Thus, we need a way to determine when &ldquo;we just got the CPU back after a break on the bench&rdquo;.</p><p>To do this we can sample the time stamp counter (TSC) register in a tight loop. As the timescale on which we can sample the TSC is small compared to the other relevant timescales (IRQ handlers, IRQ handler followed by a no-op context switch, or preemption by another task) we can reliably use it to determine the <strong>duration of our task&rsquo;s runs on the CPU</strong>, the <strong>time we spent on the runqueue</strong> waiting for the CPU, and the <strong>moment we get the CPU back</strong>. We can furthermore tell if we got the CPU back after a preemption, an interrupt, or an interrupt followed by a no-op context switch as those timescales are (most of the time) sufficiently different.</p><table><thead><tr><th style=text-align:center><div class=not-prose><figure><img src=/2026/01/drawings-tsc_sc.jpg alt=drawings-tsc_sc loading=lazy></figure></div></th></tr></thead><tbody><tr><td style=text-align:center><em>TSC-sampling method for tracing scheduler operation.</em></td></tr></tbody></table><p>Let&rsquo;s use this method to detect when the scheduler re-evaluates our presence on the CPU, i.e., when our task is involved in a <code>sched_switch</code>. In particular, we are not interested in interrupts that do not enter the scheduler as those are irrelevant from an exploitation point of view.</p><p>Concretely, the measurement logic of our program looks like this:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=kt>uint64_t</span> <span class=n>start</span> <span class=o>=</span> <span class=nf>rdtsc</span><span class=p>();</span>
+</span></span><span class=line><span class=cl><span class=kt>uint64_t</span> <span class=n>prev</span> <span class=o>=</span> <span class=n>start</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=n>i</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>while</span> <span class=p>(</span><span class=n>i</span> <span class=o>&lt;</span> <span class=n>N_TIMESLICES</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=kt>uint64_t</span> <span class=n>cur</span> <span class=o>=</span> <span class=nf>rdtsc</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=nf>unlikely</span><span class=p>(</span><span class=n>cur</span> <span class=o>-</span> <span class=n>prev</span> <span class=o>&gt;</span> <span class=n>SCHED_RUN_CYCLES</span><span class=p>))</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>timeslices</span><span class=p>[</span><span class=n>i</span><span class=p>]</span> <span class=o>=</span> <span class=n>prev</span> <span class=o>-</span> <span class=n>start</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=n>off_times</span><span class=p>[</span><span class=n>i</span><span class=p>]</span> <span class=o>=</span> <span class=n>cur</span> <span class=o>-</span> <span class=n>prev</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=n>start</span> <span class=o>=</span> <span class=n>cur</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=n>i</span><span class=o>++</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span> <span class=k>else</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>loop_total</span> <span class=o>+=</span> <span class=n>cur</span> <span class=o>-</span> <span class=n>prev</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=n>prev</span> <span class=o>=</span> <span class=n>cur</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=n>loops</span> <span class=o>+=</span> <span class=mi>1</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></div><p><em>An implementation of the FreshSlices technique.</em></p><p>Where:</p><ul><li><code>SCHED_RUN_CYCLES</code> (approx. 18us, found empirically) is a timescale (in cycles aka. TSC quanta) that is meant to separate IRQ handlers with and without a <code>sched_switch</code></li><li><code>loop_total</code> approximates the total number of cycles spent executing the measurement loop</li><li><code>N_TIMESLICES</code> is the number of <code>sched_switch</code> events we want to detect</li><li><code>timeslices[]</code> is an array of cycles between distinct <code>sched_switch</code> events where we were <code>next</code> and then <code>prev</code></li><li><code>off_times[]</code> is an array of cycles between distinct <code>sched_switch</code> events where we were <code>prev</code> and then <code>next</code>, or the duration of a single no-op switch</li></ul><p>Running this program and plotting a histogram of the measured <code>timeslices</code> array gives us the following result.</p><table><thead><tr><th style=text-align:center><div class=not-prose><figure><img src=/2026/01/hist_ts_single_idle.png alt=hts_idle_single loading=lazy></figure></div></th></tr></thead><tbody><tr><td style=text-align:center><em>Histogram of timeslices of the test program measured by the test program itself.</em></td></tr></tbody></table><p>We can validate that our measurement is correct by writing a small <code>bpftrace</code> script that attaches to the <code>sched_switch</code> tracepoint and collects the information we would expect to see in the <code>timeslices</code> array.</p><pre tabindex=0><code>BEGIN
+{
+	printf(&#34;Tracing CPU scheduler... Hit Ctrl-C to end.\n&#34;);
+	@target_comm = str($1);
+}
+
+tracepoint:sched:sched_switch
+{
+	if (args.next_comm == @target_comm &amp;&amp;
+	    args.prev_comm == @target_comm &amp;&amp;
+	    @start != 0) {
+          @usecs = hist((nsecs - @start) / 1000);
+	  @start = nsecs;
+	} else if (args.next_comm == @target_comm) {
+	  @start = nsecs;
+	} else if (args.prev_comm == @target_comm &amp;&amp; @start != 0) {
+          @usecs = hist((nsecs - @start) / 1000);
+	  @start = 0;
+	}
+}
+</code></pre><p><em><code>bpftrace</code> script to measure timeslices of a task.</em></p><p>Running this script while performing the experiment can be used to confirm the measurement results.</p><pre tabindex=0><code>@usecs:
+[16, 32)               3 |@@@@@@@@@@@@@@@@@@@@@@@@@@                          |
+[32, 64)               6 |@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@|
+[64, 128)              0 |                                                    |
+[128, 256)             0 |                                                    |
+[256, 512)             5 |@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@         |
+[512, 1K)              0 |                                                    |
+[1K, 2K)               0 |                                                    |
+[2K, 4K)               0 |                                                    |
+[4K, 8K)               0 |                                                    |
+[8K, 16K)              0 |                                                    |
+[16K, 32K)             1 |@@@@@@@@                                            |
+[32K, 64K)             1 |@@@@@@@@                                            |
+[64K, 128K)            2 |@@@@@@@@@@@@@@@@@                                   |
+[128K, 256K)           2 |@@@@@@@@@@@@@@@@@                                   |
+</code></pre><p><em>Histogram of timeslices of the test program measured by the bpf program.</em></p><p>The above experiments were performed on a relatively calm desktop system. Repeating them on the same system while building a Linux kernel on all cores results in the following results.</p><table><thead><tr><th style=text-align:center><div class=not-prose><figure><img src=/2026/01/hist_ts_single_busy.png alt=hist_ts_single_busy loading=lazy></figure></div></th></tr></thead><tbody><tr><td style=text-align:center><em>Histogram of timeslices of the test program measured by the test program itself (while building the Linux kernel).</em></td></tr></tbody></table><pre tabindex=0><code>@usecs:
+[2K, 4K)              15 |@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@|
+[4K, 8K)               2 |@@@@@@                                              |
+[8K, 16K)              1 |@@@                                                 |
+</code></pre><p><em>Histogram of timeslices of the test program measured by the bpf program (while building the Linux kernel).</em></p><p>All in all, the TSC-sampling method described in this section allows an exploit program to trace the scheduler operation on its CPU, thus enabling more informed decisions regarding commitment to the execution of ECRs.</p><p><em>Note: Exploits sometimes do a <code>sched_yield()</code> before starting an ECR. This is giving the scheduler an early chance to select a more eligible task to run, i.e., if it returns we know that the scheduler has just decided that we are the most eligible task. However, it is neither telling us <strong>how</strong> eligible we were, nor is it changing any scheduling-related parameters of our process. The advantage of the above technique is that it gives us more information (duration of previous runs on the CPU, time spent off CPU) that we can use to decide whether we want to &ldquo;take&rdquo; our current run to perform the ECR. (An added bonus is that this method cannot be blocked via seccomp profiles).</em></p><h2 id=technique-ii-cpu-bullying>Technique II: CPU-Bullying</h2><p>FreshSlices aims to address unreliability factor number three by committing to ECRs only when we determine that there is a low risk of our task being preempted by another. However, it doesn&rsquo;t <em>guarantee</em> that we are not preempted; thus, wouldn&rsquo;t it be nice if we could also reduce the probability that a preempting task is using the heap? CPU-Bullying is a technique to achieve just that.</p><p>The scheduler aims to distribute load evenly across CPUs &ndash; a process called <em>load balancing</em> (<a href=https://web.cs.ucdavis.edu/~araybuck/teaching/papers/the_linux_schedule_a_decade_of_wasted_cores.pdf target=_blank rel=noopener>ref</a>
+and <a href=https://oska874.gitbooks.io/process-scheduling-in-linux/content/chapter10.html target=_blank rel=noopener>ref</a>
+). Most of the tasks on a system are not bound to a specific CPU, and are thus free to be moved around by the scheduler&rsquo;s load balancing code.</p><p>The idea behind <strong>CPU-Bullying</strong> is simple: <strong>spawn a number of CPU-bound tasks on the same core as the exploit task to force the migration of unrelated tasks to other CPUs</strong>. As the execution of those tasks does not cause any kernel heap usage, <strong>being preempted by them is irrelevant</strong> from an exploit perspective.</p><p>A small <code>bpftrace</code> script can be used to observe task migrations.</p><pre tabindex=0><code>BEGIN
+{
+    printf(&#34;Tracing CPU migration from/to CPU0... Hit Ctrl-C to end.\n&#34;);
+}
+
+tracepoint:sched:sched_migrate_task
+{
+    if (args.orig_cpu == 0 &amp;&amp; args.dest_cpu != 0) {
+        printf(&#34;---&gt;&gt; %d\t&#39;%s&#39;\n&#34;, args.pid, args.comm);
+    } else if (args.dest_cpu == 0 &amp;&amp; args.orig_cpu != 0) {
+        printf(&#34;&lt;&lt;--- %d\t&#39;%s&#39;\n&#34;, args.pid, args.comm);
+    }
+}
+</code></pre><p><em><code>bpftrace</code> script to trace migration from/to CPU0.</em></p><p>Under normal operation, there is a constant stream of migration from and to a CPU.</p><pre tabindex=0><code># ./trace_task_migration_cpu0.bt
+Attached 2 probes
+Tracing CPU migration from/to CPU0... Hit Ctrl-C to end.
+&lt;&lt;--- 5278	&#39;threaded-ml&#39;
+&lt;&lt;--- 3035	&#39;pipewire-pulse&#39;
+---&gt;&gt; 5278	&#39;threaded-ml&#39;
+&lt;&lt;--- 2804	&#39;Xorg&#39;
+---&gt;&gt; 3035	&#39;pipewire-pulse&#39;
+---&gt;&gt; 2804	&#39;Xorg&#39;
+&lt;&lt;--- 4922	&#39;threaded-ml&#39;
+---&gt;&gt; 18377	&#39;kworker/u48:11&#39;
+---&gt;&gt; 4922	&#39;threaded-ml&#39;
+&lt;&lt;--- 2804	&#39;Xorg&#39;
+&lt;&lt;--- 18431	&#39;alacritty&#39;
+...
+</code></pre><p><em>Load balancing task migration from and to CPU0.</em></p><p>Another interesting observable is the set of tasks that are scheduled on a given CPU in a fixed time interval. This requires a (slightly) longer <code>bpftrace</code> script, but in the end we can confirm that our CPU0 idles ~95% of the time.</p><pre tabindex=0><code># ./tasks_cpu0.bt
+...
+pid 05269	comm AudioOutputDevi	total rt 529 us
+pid 00018	comm ksoftirqd/0    	total rt 13 us
+pid 04922	comm threaded-ml    	total rt 3006 us
+pid 02464	comm opensnitchd    	total rt 535 us
+pid 05278	comm threaded-ml    	total rt 4440 us
+pid 02832	comm brave          	total rt 510 us
+pid 18911	comm StreamT~ns #912	total rt 342 us
+pid 18715	comm kworker/0:1    	total rt 124 us
+pid 05274	comm threaded-ml    	total rt 267 us
+pid 04734	comm event_engine   	total rt 1491 us
+pid 05501	comm chromium       	total rt 334 us
+pid 02825	comm pavucontrol    	total rt 3419 us
+pid 03968	comm Chrome_ChildIOT	total rt 143 us
+pid 00000	comm swapper/0      	total rt 947829 us
+pid 05280	comm ThreadPoolSingl	total rt 1998 us
+pid 05268	comm AudioProcessing	total rt 13883 us
+pid 03035	comm pipewire-pulse 	total rt 1467 us
+pid 03995	comm WebRTC_W_and_N 	total rt 348 us
+...
+</code></pre><p><em>Tasks running on CPU0 during a period of 1s.</em></p><p>Spawning a large number of CPU-bound tasks on the same CPU as the one running the exploit task leads to a distinct exodus of unrelated tasks.</p><pre tabindex=0><code>&lt;&lt;--- 19133	&#39;cpu_bully&#39;
+---&gt;&gt; 19125	&#39;bpftrace&#39;
+---&gt;&gt; 3895	&#39;brave&#39;
+---&gt;&gt; 2804	&#39;Xorg&#39;
+---&gt;&gt; 5033	&#39;Compositor&#39;
+---&gt;&gt; 5027	&#39;brave&#39;
+---&gt;&gt; 6367	&#39;SharedWorker th&#39;
+---&gt;&gt; 4728	&#39;event_engine&#39;
+---&gt;&gt; 10069	&#39;G1 Service&#39;
+---&gt;&gt; 3994	&#39;WebRTC_Signalin&#39;
+---&gt;&gt; 2457	&#39;thermald&#39;
+---&gt;&gt; 5516	&#39;chromium&#39;
+---&gt;&gt; 13434	&#39;HangWatcher&#39;
+---&gt;&gt; 5757	&#39;HangWatcher&#39;
+---&gt;&gt; 5500	&#39;CacheThread_Blo&#39;
+---&gt;&gt; 17926	&#39;HangWatcher&#39;
+---&gt;&gt; 3899	&#39;HangWatcher&#39;
+---&gt;&gt; 3981	&#39;HangWatcher&#39;
+---&gt;&gt; 18756	&#39;kworker/u48:7&#39;
+---&gt;&gt; 18518	&#39;kworker/u48:13&#39;
+---&gt;&gt; 19000	&#39;ServiceWorker t&#39;
+---&gt;&gt; 5713	&#39;Chrome_ChildIOT&#39;
+</code></pre><p><em>Migration of unrelated tasks away from CPU0 when performing CPU-Bullying.</em></p><p>The <code>cpu_bully</code> program pins itself to CPU0, spawns ten CPU-bound threads (also pinned to CPU0), and then busy-waits for a while to give the load balancer a chance to migrate all movable tasks to other CPUs. We can clearly see this happening using our first script.</p><p>It then goes on to simulate an ECR by changing its <code>comm</code> to <code>ecr</code> (and later to <code>no_ecr</code> to mark the end of the simulated ECR). Using the second script, we can confirm that only a minimal number of unrelated tasks (only those also pinned to CPU0) are scheduled during the ECR.</p><pre tabindex=0><code>----
+pid 19212	comm cpu_bully/5    	total rt 93314 us
+pid 19207	comm cpu_bully/0    	total rt 89998 us
+pid 19060	comm kworker/0:2    	total rt 14 us
+pid 19214	comm cpu_bully/7    	total rt 89994 us
+pid 19216	comm cpu_bully/9    	total rt 89990 us
+pid 19209	comm cpu_bully/2    	total rt 89992 us
+pid 19211	comm cpu_bully/4    	total rt 93319 us
+pid 19208	comm cpu_bully/1    	total rt 89990 us
+pid 19206	comm cpu_bully      	total rt 89982 us
+pid 19210	comm cpu_bully/3    	total rt 89985 us
+pid 19215	comm cpu_bully/8    	total rt 89997 us
+pid 19213	comm cpu_bully/6    	total rt 89995 us
+----
+pid 19212	comm cpu_bully/5    	total rt 76916 us
+pid 19207	comm cpu_bully/0    	total rt 78819 us
+pid 19060	comm kworker/0:2    	total rt 24 us
+pid 00762	comm irq/174-iwlwifi	total rt 17 us
+pid 19214	comm cpu_bully/7    	total rt 76027 us
+pid 19216	comm cpu_bully/9    	total rt 79462 us
+pid 19209	comm cpu_bully/2    	total rt 77559 us
+pid 19211	comm cpu_bully/4    	total rt 76149 us
+pid 00107	comm irq/9-acpi     	total rt 1147 us
+pid 19208	comm cpu_bully/1    	total rt 79143 us
+pid 19206	comm ecr             	total rt 92847 us
+pid 19210	comm cpu_bully/3    	total rt 78881 us
+pid 19215	comm cpu_bully/8    	total rt 79910 us
+pid 19213	comm cpu_bully/6    	total rt 78741 us
+----
+pid 19212	comm cpu_bully/5    	total rt 75100 us
+pid 19207	comm cpu_bully/0    	total rt 75160 us
+pid 19060	comm kworker/0:2    	total rt 9 us
+pid 19214	comm cpu_bully/7    	total rt 74969 us
+pid 19216	comm cpu_bully/9    	total rt 76472 us
+pid 19209	comm cpu_bully/2    	total rt 75875 us
+pid 19211	comm cpu_bully/4    	total rt 75261 us
+pid 19208	comm cpu_bully/1    	total rt 74867 us
+pid 19206	comm no_ecr          	total rt 92950 us
+pid 19210	comm cpu_bully/3    	total rt 76807 us
+pid 19215	comm cpu_bully/8    	total rt 76178 us
+pid 19213	comm cpu_bully/6    	total rt 76647 us
+pid 00023	comm migration/0    	total rt 2 us
+</code></pre><p><em>Tasks scheduled on CPU0 in three consecutive seconds during a simulated ECR with CPU-Bullying.</em></p><p>Repeating the above experiments on a loaded system (compiling Linux on all cores) yields the same results.</p><p>In general, CPU-Bullying seems to be a promising technique to practically eliminate the threat that unexpected heap usage poses to exploit reliability. I also consider it to be strictly more powerful than FreshSlices. However, FreshSlices may still be useful in situations where sandboxes limit an exploit&rsquo;s resource consumption or block the <code>sched_setaffinity</code> syscall.</p><h2 id=project-ideas>Project Ideas</h2><p>It seems like those ideas could be a nice starting point for a student project - because they are exactly that: <em>ideas</em>. While they might sound reasonable and my ad-hoc experiments seem to back this belief, they lack a proper evaluation. There is even a closely-related <a href=https://www.usenix.org/conference/usenixsecurity22/presentation/zeng target=_blank rel=noopener>paper</a>
+that could serve as a blueprint for such a work.</p><h2 id=code>Code</h2><p>The code mentioned in this post can be found <a href=https://github.com/vobst/freshslices_and_cpubullies target=_blank rel=noopener>here</a>
+.</p></article></div></div></div></main><footer class="flex flex-none justify-center"><section class="flex flex-col md:flex-row mx-2 md:mx-0 gap-2 md:gap-0 justify-between w-full max-w-4xl lg:max-w-5xl py-6 text-slate-500 dark:text-slate-300"><div class="flex flex-row"></div><div class=grow></div><div class="flex flex-row"><i class="h-6 w-6 flex-none"><svg class="icon icon-tabler icon-tabler-copyright" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1018 0A9 9 0 103 12"/><path d="M14 9.75a3.016 3.016.0 00-4.163.173 2.993 2.993.0 000 4.154A3.016 3.016.0 0014 14.25"/></svg>
+</i>2022 - 2026 lolcads</div><div class="flex flex-row"><span class="ml-0 pl-0 md:ml-2 md:pl-2 border-l-0 md:border-l border-slate-300 dark:border-slate-400">Powered by <a href=https://gohugo.io target=_blank rel=noopener class=underline>Hugo</a> <span class=text-red-600>&#9829;</span> <a href=https://github.com/tomowang/hugo-theme-tailwind target=_blank rel=noopener class=underline>Tailwind</a></span></div></section></footer><script src=/main.min.c6372b6836971865bd94bfde974748aca8415824a2facab6ccd66a87384bfacb.js></script><div class="hidden top-1 right-1" id=code-copy><i class="h-6 w-6 block"><svg class="icon icon-tabler icon-tabler-copy" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 7m0 2.667A2.667 2.667.0 019.667 7h8.666A2.667 2.667.0 0121 9.667v8.666A2.667 2.667.0 0118.333 21H9.667A2.667 2.667.0 017 18.333z"/><path d="M4.012 16.737A2.005 2.005.0 013 15V5c0-1.1.9-2 2-2h10c.75.0 1.158.385 1.5 1"/></svg></i></div><div class="hidden top-1 right-1" id=code-copy-done><i class="h-6 w-6 block"><svg class="icon icon-tabler icon-tabler-check" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5L20 7"/></svg></i></div><script src=/code-copy.min.e7b2a74adef1ed474c335c8bd5e7832b2316b8842b0f9184d65286c5bd64f51a.js></script></body></html>
