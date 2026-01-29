@@ -17,7 +17,7 @@ Much has already been written about the art of shaping the kernel heap and creat
 
 To get started, let's look at the timeline of a prototypical, heap-based kernel exploit. (In the example we will use a UAF vulnerability, but the same reasoning applies to OOB writes and DFs.)
 
-| ![drawings-succ_expl](/2026/01/freshslices_and_cpubullies/drawings-succ_expl.jpg) |
+| ![drawings-succ_expl](/2026/01/drawings-succ_expl.jpg) |
 |:---------------------------------------------------------------------------------:|
 | *Timeline of a successful kernel heap exploit.*                                   |
 
@@ -30,7 +30,7 @@ So far, so good -- but there is a time window between events 1 and 2 where the s
 
 To get a feeling for how an uncontrolled heap operation during an ECR may cause exploit failure we can have a look at the following, alternative timeline.
 
-| ![drawings-fail_exp](/2026/01/freshslices_and_cpubullies/drawings-fail_exp.jpg) |
+| ![drawings-fail_exp](/2026/01/drawings-fail_exp.jpg) |
 |:-------------------------------------------------------------------------------:|
 | *Timeline of a failed kernel heap exploit.*                                     |
 
@@ -60,7 +60,7 @@ This implies that we want our ECR to be as close as possible to the start of our
 
 To do this we can sample the time stamp counter (TSC) register in a tight loop. As the timescale on which we can sample the TSC is small compared to the other relevant timescales (IRQ handlers, IRQ handler followed by a no-op context switch, or preemption by another task) we can reliably use it to determine the **duration of our task's runs on the CPU**, the **time we spent on the runqueue** waiting for the CPU, and the **moment we get the CPU back**. We can furthermore tell if we got the CPU back after a preemption, an interrupt, or an interrupt followed by a no-op context switch as those timescales are (most of the time) sufficiently different.
 
-| ![drawings-tsc_sc](/2026/01/freshslices_and_cpubullies/drawings-tsc_sc.jpg) |
+| ![drawings-tsc_sc](/2026/01/drawings-tsc_sc.jpg) |
 |:---------------------------------------------------------------------------:|
 | *TSC-sampling method for tracing scheduler operation.*                      |
 
@@ -99,7 +99,7 @@ Where:
 
 Running this program and plotting a histogram of the measured `timeslices` array gives us the following result.
 
-| ![hts_idle_single](/2026/01/freshslices_and_cpubullies/hist_ts_single_idle.png)        |
+| ![hts_idle_single](/2026/01/hist_ts_single_idle.png)        |
 |:--------------------------------------------------------------------------------------:|
 | *Histogram of timeslices of the test program measured by the test program itself.*     |
 
@@ -152,7 +152,7 @@ Running this script while performing the experiment can be used to confirm the m
 
 The above experiments were performed on a relatively calm desktop system. Repeating them on the same system while building a Linux kernel on all cores results in the following results.
 
-| ![hist_ts_single_busy](/2026/01/freshslices_and_cpubullies/hist_ts_single_busy.png)                                  |
+| ![hist_ts_single_busy](/2026/01/hist_ts_single_busy.png)                                  |
 |:--------------------------------------------------------------------------------------------------------------------:|
 | *Histogram of timeslices of the test program measured by the test program itself (while building the Linux kernel).* |
 
