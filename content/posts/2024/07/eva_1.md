@@ -3,13 +3,9 @@ title: "E²VA: Android Basics (Part 2)"
 date: 2024-07-22T16:46:21+01:00
 author: "Pascal Kühnemann"
 draft: false
-authorTwitter: "" #do not include @
-cover: ""
 tags: ["Android", "Binary Exploitation", "JNI", "E²VA"]
 keywords: ["Android", "Binary Exploitation", "JNI", "E²VA"]
 description: ""
-showFullContent: false
-readingTime: true
 ---
 
 # Android Binary Exploitation

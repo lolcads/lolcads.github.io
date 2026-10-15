@@ -3,7 +3,7 @@ baseurl = "https://lolcads.github.io"
 title = "lolcads tech blog"
 author = "lolcads"
 copyright = "lolcads"
-languageCode = "en"
+locale = "en"
 defaultContentLanguage = "en"
 theme = "tailwind"
 

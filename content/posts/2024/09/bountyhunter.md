@@ -2,12 +2,10 @@
 title: "Adversary Emulation is a Complicated Profession - Intelligent Cyber Adversary Emulation with the Bounty Hunter"
 date: 2024-09-12T10:00:00+02:00
 author: "Louis Hackländer-Jansen"
-authorTwitter: "L015H4CK" #do not include @
 image: "/2024/09/bountyhunter_logo_v1_title.png"
 tags: ["Adversary Emulation", "Caldera", "Cybersecurity"]
 keywords: ["Adversary Emulation", "Caldera"]
 description: "This blog post introduces the Bounty Hunter - a novel Caldera plugin for intelligent cyber adversary emulation. Its main contribution is the emulation of complete, realistic cyber attack chains. The Plugin is available on [**GitHub**](https://github.com/fkie-cad/bountyhunter)."
-showFullContent: false
 draft: false
 ---
 

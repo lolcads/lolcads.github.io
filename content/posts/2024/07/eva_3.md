@@ -3,13 +3,9 @@ title: "E²VA: Use After Free Write/Execute Module (Part 4)"
 date: 2024-07-24T16:46:21+01:00
 author: "Pascal Kühnemann"
 draft: false
-authorTwitter: "" #do not include @
-cover: ""
 tags: ["Android", "Binary Exploitation", "JNI", "E²VA", "Use After Free", "Memory Leak"]
 keywords: ["Android", "Binary Exploitation", "JNI", "E²VA", "Use After Free", "Memory Leak"]
 description: ""
-showFullContent: false
-readingTime: true
 ---
 
 # Exploitation of *Use - After - Free* Modules

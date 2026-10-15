@@ -6,7 +6,6 @@ tags: ["SIEM", "ThreatDetection", "Sigma"]
 keywords: ["SIEM", "ThreatDetection", "Sigma"]
 description: "Signature-based threat detection helps to timely detect malicious behavior. This blog post shows that during an exemplary cyber attack, 99.99% of alerts generated using the well-known Sigma rules can be successfully evaded using fairly straight-forward techniques."
 image: "/2025/01/evadingsigma_cover.png"
-showFullContent: false
 draft: false
 ---
     

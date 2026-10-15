@@ -5,7 +5,6 @@ draft: false
 author: "Patrick Detering"
 tags: ["network", "fuzzing"]
 description: "We explain how we built a fuzzer for network applications that we tried to make as efficient and as effective as possible. We utilized custom mutators and input passing over shared memory and found that it gave us a huge speed and coverage boost compared to other network fuzzers."
-showFullContent: false
 ---
 
 ## Introduction

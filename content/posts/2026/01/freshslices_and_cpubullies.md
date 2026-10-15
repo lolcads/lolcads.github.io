@@ -4,9 +4,7 @@ date: 2026-01-29T10:00:00+02:00
 author: "Valentin Obst"
 tags: ["Linux", "kernel", "exploitation", "heap", "reliability"]
 keywords: ["Linux", "kernel", "exploitation", "heap", "reliability"]
-showFullContent: false
 description: "This blog post presents two (afaik) novel, generic techniques for improving the reliability of kernel heap exploits."
-readingTime: true
 ---
 
 Exploits built around heap-based memory corruptions will never be perfectly reliable. There are multiple factors contributing to this, one being that the heap is shared among all tasks (user processes and kernel threads) running on a machine. Thus, the task running the exploit cannot exercise perfect control over it.

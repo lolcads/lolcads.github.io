@@ -5,7 +5,6 @@ draft: false
 author: "Valentin Obst"
 tags: ["Linux", "Kernel", "BTF", "Forensics"]
 keywords: ["Linux", "Kernel", "BTF", "Forensics"]
-readingTime: true
 ---
 
 This post is about some work that I did on automatic profile generation for memory forensics of Linux systems. To be upfront about it: This work is somewhat half-finished -- it already does something quite useful, but it could do a lot more, and it has not been evaluated thoroughly enough to be considered "production ready". The reason I decided to publish it anyway is that I believe that there is an interesting opportunity to change the way in which we generate profiles for the analysis of Linux memory images _in practice_. However, in order for it to become a production tool, at least one outstanding problem has to be addressed (I have some ideas on that one) and lots of coding work needs to be done -- and I simply do not have the resources to work on that right now.

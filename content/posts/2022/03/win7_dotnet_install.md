@@ -2,13 +2,8 @@
 title = "Installing new .NET versions on a Windows 7 VM"
 date = "2022-03-16T12:01:43+01:00"
 author = "Manuel Blatt"
-authorTwitter = "" #do not include @
-cover = ""
 tags = ["Win7", ".NET", "dynamic analysis"]
-keywords = ["", ""]
 description = ""
-showFullContent = false
-readingTime = false
 +++
 
 # Installing new .NET versions on a Windows 7 VM

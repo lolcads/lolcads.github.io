@@ -3,13 +3,9 @@ title: "E²VA: Stack Buffer Overflow Module (Part 3)"
 date: 2024-07-23T16:46:21+01:00
 author: "Pascal Kühnemann"
 draft: false
-authorTwitter: "" #do not include @
-cover: ""
 tags: ["Android", "Binary Exploitation", "JNI", "E²VA", "Buffer Overflow", "Memory Leak"]
 keywords: ["Android", "Binary Exploitation", "JNI", "E²VA", "Buffer Overflow", "Memory Leak"]
 description: ""
-showFullContent: false
-readingTime: true
 ---
 
 # Exploitation of *EasyStackBufferOverflowModule*

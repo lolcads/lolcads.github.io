@@ -3,13 +3,9 @@ title: "Scudo, the Allocator (Part 1)"
 date: 2024-07-25T16:46:21+01:00
 author: "Pascal Kühnemann"
 draft: false
-authorTwitter: "" #do not include @
-cover: ""
 tags: ["Android", "Binary Exploitation", "JNI", "Scudo", "Heap Exploitation"]
 keywords: ["Android", "Binary Exploitation", "JNI", "Scudo", "Heap Exploitation"]
 description: ""
-showFullContent: false
-readingTime: true
 ---
 
 # Binary Exploitation for *Scudo Heap Allocator* on Android

@@ -5,7 +5,6 @@ draft: false
 author: "Valentin Obst"
 tags: ["firmware reverse engineering", "machine code detection", "processor architecture detection", "binary analysis", "n-gram distributions"]
 keywords: ["firmware reverse engineering", "machine code detection", "processor architecture detection", "binary analysis", "n-gram distributions"]
-readingTime: true
 ---
 
 Firmware reverse engineering comes with some unique challenges compared to the

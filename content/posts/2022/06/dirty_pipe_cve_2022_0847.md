@@ -2,13 +2,9 @@
 title = "Exploration of the Dirty Pipe Vulnerability (CVE-2022-0847)"
 date = "2022-06-06T19:57:03+02:00"
 author = "Valentin Obst and Martin Clauß"
-authorTwitter = "" #do not include @
-cover = ""
 tags = ["Linux", "kernel", "LPE", "pipe", "splice", "page cache", "debugging"]
 keywords = ["Linux", "kernel", "LPE", "pipe", "splice", "page cache", "debugging"]
 description = ""
-showFullContent = false
-readingTime = false
 +++
 
 ## Intro

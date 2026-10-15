@@ -1,6 +1,7 @@
 ---
 title: "About"
-readingTime: false
+showReadingTime: false
+showAuthor: false
 toc: false
 ---
 

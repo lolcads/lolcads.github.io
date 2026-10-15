@@ -3,13 +3,9 @@ title: "Timing Attack Experiments against Scudo (Part 2)"
 date: 2024-07-26T16:46:21+01:00
 author: "Pascal Kühnemann"
 draft: false
-authorTwitter: "" #do not include @
-cover: ""
 tags: ["Android", "Side Channel Attack", "Timing Attack", "JNI", "DamnVulnerableApp", "Scudo", "Heap Exploitation"]
 keywords: ["Android", "Side Channel Attack", "Timing Attack", "JNI", "DamnVulnerableApp", "Scudo", "Heap Exploitation"]
 description: ""
-showFullContent: false
-readingTime: true
 ---
 
 # Attempting Timing Attacks against *Scudo*

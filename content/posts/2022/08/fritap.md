@@ -2,13 +2,9 @@
 title = "friTap - Decrypting TLS on the fly"
 date = "2022-08-12T13:09:24+02:00"
 author = "Daniel Baier and Francois Egner"
-authorTwitter = "" #do not include @
-cover = ""
 tags = ["frida", "network", "TLS", "TLS decryption"]
 keywords = ["frida", "network", "TLS", "TLS decryption"]
 description = ""
-showFullContent = false
-readingTime = true
 +++
 
 ## Encryption - a curse and a blessing at the same time

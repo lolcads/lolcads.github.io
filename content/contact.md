@@ -1,6 +1,7 @@
 ---
 title: "Contact"
-readingTime: false
+showReadingTime: false
+showAuthor: false
 toc: false
 ---
 

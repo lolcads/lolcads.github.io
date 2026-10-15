@@ -2,13 +2,8 @@
 title = "*PowerView* is evil, but *PowerVi* and *ew* are legit, right? - Missing signature-based detections due to PowerShell Script Block Logging Fragmentation"
 date = "2024-04-15T11:01:40+02:00"
 author = "Louis Hackländer-Jansen"
-authorTwitter = "L015H4CK" #do not include @
-cover = ""
 tags = ["SIEM", "ThreatDetection", "Sigma", "PowerShell", "ScriptBlockLogging", "Forensics"]
-keywords = ["", ""]
 description = "[Sigma](https://github.com/SigmaHQ/sigma) offers more than 3000 rules for signature-based threat detection. 140 of these rules aim to detect suspicious/malicious PowerShell scripts by looking into PowerShell script block logs. Fragmentation of script blocks during Script Block Logging results in varying number of alerts when loading the same script multiple times. On the one hand, there is a trend of more alerts being generated when the script is split into more fragments (which is fine), but on the other hand, the fragmentation of scripts into blocks may result in missed detections. "
-showFullContent = false
-readingTime = true
 +++
 
 # *PowerView* is evil, but *PowerVi* and *ew* are legit, right? - Missing signature-based detections due to PowerShell Script Block Logging Fragmentation

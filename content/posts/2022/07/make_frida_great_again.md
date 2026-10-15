@@ -2,13 +2,8 @@
 title: "Make Frida Great Again"
 date: 2022-07-28T13:29:30+02:00
 author: "Pascal Kühnemann"
-authorTwitter: "" #do not include @
-cover: ""
 tags: ["Frida", "ELF", "Code Injection"]
-keywords: ["", ""]
 description: ""
-showFullContent: false
-readingTime: false
 draft: false
 ---
 
